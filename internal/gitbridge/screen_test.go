@@ -266,6 +266,49 @@ func TestScreeningBlocksQuarantinesAndPublishesAnyway(t *testing.T) {
 	}
 }
 
+// The commit author leaks as much as the chunk's created_by: engram-ui creates
+// the clone, so without this it commits with the machine's global identity.
+// The settings outlive the clone, so they carry the identity, on both paths
+// that commit.
+func TestPublishCommitsWithTheRepositoryGitIdentity(t *testing.T) {
+	b, url := screenedRepo(t)
+	// The environment outranks git config; clear what screenedRepo set.
+	for _, k := range []string{"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"} {
+		t.Setenv(k, "")
+		if err := os.Unsetenv(k); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeRepoSettings(t, url, RepoSettings{
+		CreatedBy: "personal-user", Blocklist: []string{`acme-corp`},
+		GitName: "Personal Name", GitEmail: "personal@example.invalid",
+	})
+	ctx := context.Background()
+	const want = "Personal Name <personal@example.invalid>|Personal Name <personal@example.invalid>"
+	author := func() string {
+		return strings.TrimSpace(mustGit(t, b.Dir(), "log", "-1", "--format=%an <%ae>|%cn <%ce>"))
+	}
+
+	exportNext(t, obs("obs-1", screenProject, "project", "Call notes", "Talked to acme-corp"))
+	if res := b.Push(ctx, screenProject); !res.Blocked {
+		t.Fatalf("precondition: %+v", res)
+	}
+	if res := b.PublishQuarantined(ctx, screenProject); res.Err != nil || !res.Pushed {
+		t.Fatalf("publish anyway: %+v", res)
+	}
+	if got := author(); got != want {
+		t.Errorf("publish anyway committed as %q, want %q", got, want)
+	}
+
+	exportNext(t, obs("obs-2", screenProject, "project", "Clean", "nothing to hide"))
+	if res := b.Push(ctx, screenProject); res.Err != nil || !res.Pushed {
+		t.Fatalf("publish: %+v", res)
+	}
+	if got := author(); got != want {
+		t.Errorf("publish committed as %q, want %q", got, want)
+	}
+}
+
 // Fixing the observations and publishing again produces a new chunk that
 // covers the same ground, so the quarantined one is obsolete.
 func TestCleanPublishSupersedesQuarantine(t *testing.T) {

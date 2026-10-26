@@ -227,6 +227,11 @@ func (rn *Runner) ShowStage(ctx context.Context, dir string, stage int, path str
 	return rn.runOut(ctx, dir, "show", ":"+itoa(stage)+":"+path)
 }
 
+// SetConfig writes one key to the repository's own config (git config --local).
+func (rn *Runner) SetConfig(ctx context.Context, dir, key, value string) Result {
+	return rn.run(ctx, dir, "config", "--local", key, value)
+}
+
 // Add stages the given pathspecs.
 func (rn *Runner) Add(ctx context.Context, dir string, pathspecs ...string) Result {
 	return rn.run(ctx, dir, append([]string{"add", "--"}, pathspecs...)...)

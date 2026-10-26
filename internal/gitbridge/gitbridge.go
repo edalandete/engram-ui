@@ -733,6 +733,9 @@ func (b *Bridge) publish(ctx context.Context, project string) PushResult {
 	if err == nil && screened {
 		patterns, err = set.patterns()
 	}
+	if err == nil && screened {
+		err = b.applyIdentity(ctx, set)
+	}
 	if err != nil {
 		res.Stage, res.Err = "screen", err
 		return res
@@ -910,6 +913,14 @@ func (b *Bridge) PublishQuarantined(ctx context.Context, project string) PushRes
 	}
 	if b.RemoteURL(ctx) == "" {
 		res.Err = errors.New("no shared repository configured")
+		return res
+	}
+	set, found, err := b.settings(ctx)
+	if err == nil && found {
+		err = b.applyIdentity(ctx, set)
+	}
+	if err != nil {
+		res.Stage, res.Err = "screen", err
 		return res
 	}
 	// Same unconditional fast-forward as publish, for the same reason.

@@ -38,6 +38,8 @@ const settingsFileName = "engram-ui-repos.json"
 type RepoSettings struct {
 	CreatedBy string   `json:"created_by,omitempty"`
 	Blocklist []string `json:"blocklist,omitempty"`
+	GitName   string   `json:"git_name,omitempty"`
+	GitEmail  string   `json:"git_email,omitempty"`
 }
 
 // settings returns this clone's entry; found is false when it has none. A file
@@ -78,6 +80,24 @@ func (b *Bridge) user() string {
 		}
 	}
 	return localUser()
+}
+
+// applyIdentity makes the clone commit as the repository's git identity.
+// Written into the clone's config on every publish rather than once, because
+// the clone can be deleted and recreated and the settings file cannot. The
+// clone's config, not a per-command flag, so merge commits during reconcile
+// carry it too.
+func (b *Bridge) applyIdentity(ctx context.Context, s RepoSettings) error {
+	for _, kv := range [][2]string{{"user.name", s.GitName}, {"user.email", s.GitEmail}} {
+		v := strings.TrimSpace(kv[1])
+		if v == "" {
+			continue
+		}
+		if r := b.git.SetConfig(ctx, b.dir, kv[0], v); r.Failed() {
+			return fmt.Errorf("set %s in the clone: %s", kv[0], firstLine(r.Output))
+		}
+	}
+	return nil
 }
 
 // patterns compiles the blocklist, case-insensitively.

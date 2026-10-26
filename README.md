@@ -86,6 +86,8 @@ keyed by the remote URL exactly as `git remote get-url origin` prints it in the 
   "repos": {
     "git@github-personal:me/engram-memories.git": {
       "created_by": "me",
+      "git_name": "Me",
+      "git_email": "me@users.noreply.github.com",
       "blocklist": ["work-account", "acme\\.com", "slack"]
     }
   }
@@ -94,6 +96,9 @@ keyed by the remote URL exactly as `git remote get-url origin` prints it in the 
 
 - `created_by`: the name chunks for this repository are signed with, instead of
   the OS account.
+- `git_name` / `git_email`: the commit author for this repository, written into
+  its clone's config on every publish (the clone is recreated on reconnect; this
+  file is not). Without them, commits use your global git identity.
 - Any entry turns on screening before publish: every observation must belong to
   the project, must not be `personal` scope, and must not match a `blocklist`
   pattern (Go regular expressions, case-insensitive). A refused commit is held
