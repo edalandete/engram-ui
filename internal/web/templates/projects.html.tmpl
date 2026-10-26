@@ -1,0 +1,82 @@
+{{define "content"}}
+<h1>Projects</h1>
+<p class="text-subtext">Per-project activity. Sorted by last activity. Counts limited to recent scan window.</p>
+
+<nav class="actions">
+  <a class="action-btn" href="/backup?all=1" hx-boost="false" download>↓ Backup all projects</a>
+</nav>
+
+{{if .Rows}}
+{{/* The row is a project name plus six numbers plus five buttons. Rather than
+     scroll, it gives in order of how much slack each part has: the buttons
+     wrap first, then the name, then — only on a phone — the headers. The
+     wrapper stays as a net: if a window is narrower than even that, the table
+     scrolls on its own instead of pushing the rest of the page sideways. */}}
+<div class="table-scroll">
+<table class="proj-table">
+  <thead>
+    <tr>
+      <th>Project</th>
+      <th>Obs</th>
+      <th>Sessions</th>
+      <th>Topic-keys</th>
+      {{/* Conflicts = the ones still waiting for a verdict, the only actionable
+           number and what blocks publishing. Relations = every link between
+           observations, most of which (related, compatible, not_conflict) are
+           not conflicts at all — labelling that total "Conflicts", as it used
+           to be, read as a disaster in projects that had none. */}}
+      <th title="Relations waiting for a verdict">Conflicts</th>
+      <th title="Links between observations, judged or not — most are not conflicts">Relations</th>
+      <th>Last activity</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Rows}}
+    <tr{{if eq .Name $.CurrentProject}} class="proj-active"{{end}}>
+      <td><strong>{{.Name}}</strong>{{if eq .Name $.CurrentProject}} <span class="badge">active</span>{{end}}</td>
+      <td>{{.Observations}}</td>
+      <td>{{.Sessions}}</td>
+      <td>{{.TopicKeys}}</td>
+      <td>{{if gt .Pending 0}}<span class="text-peach">{{.Pending}}</span>{{else}}{{.Pending}}{{end}}</td>
+      <td>{{.ConflictsTotal}}</td>
+      <td class="text-subtext">{{.LastActivity}}</td>
+      {{/* Every action switches to that project on the way in, rather than
+           passing ?project= for one request: landing on a screen that shows B
+           while the switcher still says A, and reverting on the next click, is
+           worse than not going at all. hx-boost off because these are redirects
+           that set a cookie — htmx would push /set-project into the URL bar. */}}
+      <td>
+        {{/* Same width both ways, or every other button in the row shifts
+             sideways depending on which project happens to be active. */}}
+        {{if eq .Name $.CurrentProject}}
+        {{/* aria-disabled dropped: it only means anything on a widget role,
+             and on a plain span it is inert ARIA. The word "Active" already
+             says what it says. */}}
+        <span class="action-btn proj-switch">Active</span>
+        {{else}}
+        <a class="action-btn proj-switch" href="/set-project?project={{.Name}}&to=/" hx-boost="false">Switch</a>
+        {{end}}
+        <a class="action-btn" href="/set-project?project={{.Name}}&to=/observations" hx-boost="false">Observations</a>
+        {{/* One session is the normal case — agents keep saving into a single
+             manual-save-<project> — so skip the list with one row in it. The
+             label says which you are getting, so the jump is never a surprise. */}}
+        {{if eq .Sessions 1}}
+        <a class="action-btn" href="/set-project?project={{.Name}}&to=/sessions/{{urlquery .LatestSession}}" hx-boost="false">Session</a>
+        {{else if gt .Sessions 1}}
+        <a class="action-btn" href="/set-project?project={{.Name}}&to=/sessions" hx-boost="false">Sessions</a>
+        {{end}}
+        <a class="action-btn" href="/set-project?project={{.Name}}&to=/graph" hx-boost="false">Graph</a>
+        {{/* Straight to the download: a backup is not a place you navigate to,
+             so it neither switches project nor leaves the table. */}}
+        <a class="action-btn" href="/backup?project={{.Name}}" hx-boost="false" download>Backup</a>
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<p class="text-subtext">No projects.</p>
+{{end}}
+{{end}}

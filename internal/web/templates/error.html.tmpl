@@ -1,0 +1,7 @@
+{{define "content"}}
+<section class="card error">
+  <h2 class="text-red">Error</h2>
+  <p>{{.Message}}</p>
+  {{if .Detail}}<pre class="preview">{{.Detail}}</pre>{{end}}
+</section>
+{{end}}

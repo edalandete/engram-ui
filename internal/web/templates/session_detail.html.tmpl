@@ -1,0 +1,63 @@
+{{define "content"}}
+{{with .Session}}
+<h1>Session</h1>
+
+<section class="metadata">
+  <div><span class="text-subtext">ID</span><code>{{.ID}}</code></div>
+  <div><span class="text-subtext">Project</span><span>{{.Project}}</span></div>
+  {{if .Directory}}<div><span class="text-subtext">Directory</span><code>{{.Directory}}</code></div>{{end}}
+  <div><span class="text-subtext">Started</span><span>{{.StartedAt}}</span></div>
+  {{if .EndedAt}}<div><span class="text-subtext">Ended</span><span>{{.EndedAt}}</span></div>{{end}}
+  {{if .ObservationCount}}<div><span class="text-subtext">Obs (declared)</span><span class="text-green">{{.ObservationCount}}</span></div>{{end}}
+</section>
+
+{{if .Summary}}
+<section class="card markdown">
+  <h2>Summary</h2>
+  {{markdown .Summary}}
+</section>
+{{end}}
+{{end}}
+
+{{if $.ByType}}
+<section class="card stats-grid">
+  {{range $k, $v := $.ByType}}
+  <div><span class="text-subtext">{{$k}}</span><strong class="text-green">{{$v}}</strong></div>
+  {{end}}
+</section>
+{{end}}
+
+<h2>Timeline</h2>
+{{if $.Entries}}
+<ol class="timeline-strip">
+  {{range $.Entries}}
+  {{if eq .Kind "prompt"}}
+  <li class="t-entry t-prompt">
+    <span class="t-time">{{.CreatedAt}}</span>
+    <span class="t-marker">›</span>
+    <div class="t-body">
+      <span class="badge badge-prompt">prompt</span>
+      <div class="preview">{{snippet .Prompt.Content 360}}</div>
+    </div>
+  </li>
+  {{else}}
+  <li class="t-entry t-obs">
+    <span class="t-time">{{.CreatedAt}}</span>
+    <span class="t-marker">●</span>
+    <div class="t-body">
+      <a href="/observations/{{.Obs.ID}}">
+        <span class="meta-id">#{{.Obs.ID}}</span>
+        <span class="badge">{{.Obs.Type}}</span>
+        <span class="row-title">{{.Obs.Title}}</span>
+      </a>
+      {{if .Obs.TopicKey}}<a class="text-subtext" href="/topics/{{.Obs.TopicKey}}"><code>{{.Obs.TopicKey}}</code></a>{{end}}
+      {{if .Obs.Content}}<div class="preview">{{snippet .Obs.Content 280}}</div>{{end}}
+    </div>
+  </li>
+  {{end}}
+  {{end}}
+</ol>
+{{else}}
+<p class="text-subtext">No observations or prompts captured for this session in the recent scan window.</p>
+{{end}}
+{{end}}

@@ -1,0 +1,34 @@
+# Build artifacts
+/bin/
+/dist/
+*.exe
+# Root only: unanchored, this also ignored cmd/engram-ui/ and main.go never got committed.
+/engram-ui
+engram-ui.exe
+
+# Embedded engram binary (built from submodule)
+/internal/launcher/embedded/engram
+/internal/launcher/embedded/engram.exe
+
+# `go build` renames a locked Windows binary to <name>~ when it cannot delete it
+*~
+
+# Go
+/vendor/
+*.test
+*.out
+coverage.txt
+
+# Generated templ files (regenerated on build)
+*_templ.go
+!*_templ.txt
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local config
+.env
+.env.local

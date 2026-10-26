@@ -1,0 +1,17 @@
+{{define "pagination"}}
+{{if .ShowPagination}}
+<nav class="pagination">
+  {{if gt .Offset 0}}
+    <a href="{{.BasePath}}&limit={{.Limit}}&offset={{sub .Offset .Limit}}">« prev</a>
+  {{else}}
+    <span class="text-subtext">« prev</span>
+  {{end}}
+  <span class="text-subtext">offset {{.Offset}} · limit {{.Limit}}</span>
+  {{if .HasNext}}
+    <a href="{{.BasePath}}&limit={{.Limit}}&offset={{add .Offset .Limit}}">next »</a>
+  {{else}}
+    <span class="text-subtext">next »</span>
+  {{end}}
+</nav>
+{{end}}
+{{end}}

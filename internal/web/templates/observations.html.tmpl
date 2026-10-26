@@ -1,0 +1,111 @@
+{{define "content"}}
+<h1>Observations</h1>
+
+{{/* One form, every filter. The full-text box, the scope/type selects and the
+     contributor picker all narrow the same list, so they submit together —
+     which is also what lets you search inside one person's contributions. */}}
+<form class="search-form" id="main-search-form" action="/observations" method="get">
+  <input type="search" name="q" aria-label="Full-text query" value="{{.Query}}" placeholder="FTS5 query — empty for the most recent…" autofocus>
+  {{/* No scope control on purpose: project vs personal is not how anyone looks
+       for something here. The URL parameter is still honoured, so an old link
+       that carries one keeps working. */}}
+  {{/* engram's field is called "type"; the screen says "category", the word
+       engram's own docs use for it. "Topic" is taken — see the Topics screen
+       and the topic_key on every observation. */}}
+  <select name="type" data-sticky="type" aria-label="Category">
+    <option value=""{{if not .Type}} selected{{end}}>any category</option>
+    {{range .Types}}
+    <option value="{{.}}"{{if eq . $.Type}} selected{{end}}>{{.}}</option>
+    {{end}}
+  </select>
+  {{/* Contributor comes from the sync commits, not from the database: engram
+       keeps no author on an observation. Only rendered when we have an index. */}}
+  {{if .Contributors}}
+  <select name="created_by" aria-label="Contributor">
+    <option value=""{{if not .CreatedBy}} selected{{end}}>every contributor</option>
+    {{range .Contributors}}
+    <option value="{{.}}"{{if eq . $.CreatedBy}} selected{{end}}>{{.}}</option>
+    {{end}}
+  </select>
+  {{end}}
+  <button type="submit">Filter</button>
+  {{/* Clear names every filter with an empty value rather than dropping them
+       from the URL. The sticky-filter script only leaves a control alone when
+       its parameter is PRESENT, so a bare /observations let it put the old
+       category straight back — the list came back unfiltered while the
+       dropdown still showed a filter. */}}
+  {{if or .Query .Scope .Type .CreatedBy .Since}}<a class="action-btn" href="/observations?q=&type=&created_by=&since=">Clear</a>{{end}}
+  {{if .Scope}}<input type="hidden" name="scope" value="{{.Scope}}">{{end}}
+  {{/* Carried, not shown: this one arrives by clicking a day in the dashboard
+       heatmap, and it has to survive submitting the other filters. */}}
+  {{if .Since}}<input type="hidden" name="since" value="{{.Since}}">{{end}}
+</form>
+
+{{if .Since}}
+<p class="text-subtext">Showing <strong>{{.Since}}</strong> only · <a href="/observations?q={{.Query}}&type={{.Type}}&created_by={{.CreatedBy}}&since=">clear the day</a></p>
+{{end}}
+
+<p class="text-subtext">
+  {{len .Observations}} shown{{if .Query}} for "{{.Query}}"{{end}}{{if .CurrentProject}} · project: <code>{{.CurrentProject}}</code>{{end}}
+  {{if .MatchedCount}} · {{.MatchedCount}} match{{if ne .MatchedCount 1}}es{{end}}{{if .CreatedBy}} by <strong>{{.CreatedBy}}</strong>{{end}} among the last {{.ScannedCount}} scanned{{end}}
+</p>
+{{if .ScanCapped}}
+<p class="text-peach">⚠ Only the most recent {{.ScannedCount}} observations were scanned — older matches are not shown. Narrow it with a query.</p>
+{{end}}
+
+{{/* One toolbar, not two rows: the bulk controls on the left, the exports
+     pushed right. It stays rendered on an empty list so the vault export never
+     disappears, and only the bulk half dims while nothing is selected. */}}
+{{/* hx-disable sits on the toolbar, not on the <form>. It has to be here at
+     all — the Apply button's onclick="return confirm(...)" only cancels a
+     NATIVE submit, and htmx would ignore it — but when it wrapped the whole
+     form it also covered the list below, so every row link in the most-used
+     list in the app fell back to a full page reload while the identical link
+     on every other screen was boosted. The checkboxes reach the form by id. */}}
+<form id="bulk-form" action="/observations/bulk" method="post">
+  <div class="bulk-bar" data-bulk-bar hx-disable="true">
+    <div class="bulk-controls">
+      <span class="text-subtext"><span data-bulk-count>0</span> selected</span>
+      <select name="action" required aria-label="Bulk action">
+        <option value="">action…</option>
+        <option value="delete">delete</option>
+        <option value="patch_scope">set scope</option>
+        <option value="patch_type">set category</option>
+        <option value="patch_topic_prefix">set topic-key prefix</option>
+      </select>
+      <input name="value" type="text" placeholder="value (skip for delete)" aria-label="Value for the bulk action">
+      <button class="action-btn" type="submit" onclick="return confirm('Apply to selected?');">Apply</button>
+      <button class="action-btn" type="button" data-bulk-clear>Clear</button>
+    </div>
+    <div class="bulk-exports">
+      <a class="action-btn" href="/export.json?q={{.Query}}&scope={{.Scope}}&type={{.Type}}&limit={{.Limit}}">↓ JSON</a>
+      <a class="action-btn" href="/export.csv?q={{.Query}}&scope={{.Scope}}&type={{.Type}}&limit={{.Limit}}">↓ CSV</a>
+      <a class="action-btn" href="/export-vault">↓ Markdown vault</a>
+    </div>
+  </div>
+{{if .Observations}}
+  <ul class="list">
+    {{range .Observations}}
+    <li class="list-row">
+      <input class="bulk-check" type="checkbox" form="bulk-form" name="ids" value="{{.ID}}" aria-label="Select observation #{{.ID}}">
+      <a href="/observations/{{.ID}}">
+        <span class="meta-id">#{{.ID}}</span>
+        <span class="badge">{{.Type}}</span>
+        <span class="row-title">{{.Title}}</span>
+        <span class="text-subtext">{{.Project}}</span>
+        {{with lookup $.Authors .SyncID}}<span class="badge badge-cloud" title="Published by {{.}}">☁ {{.}}</span>{{end}}
+        <span class="text-subtext meta-time">{{.CreatedAt}}</span>
+      </a>
+      {{if .Content}}<div class="preview markdown">{{mdsnippet .Content 240}}</div>{{end}}
+    </li>
+    {{end}}
+  </ul>
+{{else if .Query}}
+  <p class="text-subtext">No matches.</p>
+{{else}}
+  <p class="text-subtext">No observations.</p>
+{{end}}
+</form>
+
+{{template "pagination" .}}
+{{end}}

@@ -1,0 +1,35 @@
+{{define "content"}}
+{{with .Obs}}
+<h1>Observation #{{.ID}}</h1>
+
+<section class="metadata">
+  <div><span class="text-subtext">Type</span><span class="badge">{{.Type}}</span></div>
+  <div><span class="text-subtext">Title</span><strong>{{.Title}}</strong></div>
+  {{if .Project}}<div><span class="text-subtext">Project</span><span>{{.Project}}</span></div>{{end}}
+  {{if .Scope}}<div><span class="text-subtext">Scope</span><span>{{.Scope}}</span></div>{{end}}
+  {{if .TopicKey}}<div><span class="text-subtext">Topic key</span><a href="/topics/{{.TopicKey}}"><code>{{.TopicKey}}</code></a></div>{{end}}
+  {{if .SessionID}}<div><span class="text-subtext">Session</span><a href="/sessions/{{.SessionID}}">{{.SessionID}}</a></div>{{end}}
+  <div><span class="text-subtext">Created</span><span>{{.CreatedAt}}</span></div>
+  {{if .UpdatedAt}}<div><span class="text-subtext">Updated</span><span>{{.UpdatedAt}}</span></div>{{end}}
+  {{if .RevisionCount}}<div><span class="text-subtext">Revisions</span><span>{{.RevisionCount}}</span></div>{{end}}
+  {{with $.CreatedBy}}<div><span class="text-subtext">Provenance</span><span class="badge badge-cloud" title="Imported from cloud">☁ from cloud · pushed by {{.}}</span></div>{{end}}
+</section>
+
+<section class="card content-block markdown" id="obs-content">{{markdown .Content}}</section>
+<details class="text-subtext">
+  <summary>raw</summary>
+  <pre>{{.Content}}</pre>
+</details>
+
+<nav class="actions">
+  <a class="action-btn" href="/observations/{{.ID}}/edit">✎ Edit</a>
+  <button class="action-btn" type="button" data-clipboard-target="#obs-content">⧉ Copy</button>
+  {{/* hx-boost off + download: the body is boosted, and htmx has no idea what
+       Content-Disposition means. It fetched the markdown, found no <main> to
+       select in it, and swapped the page away for nothing. */}}
+  <a class="action-btn" href="/observations/{{.ID}}/export.md" hx-boost="false" download>↓ Markdown</a>
+  <a class="action-btn" href="/timeline/{{.ID}}">→ Timeline</a>
+  {{if .TopicKey}}<a class="action-btn" href="/topics/{{.TopicKey}}">→ Revisions</a>{{end}}
+</nav>
+{{end}}
+{{end}}

@@ -1,0 +1,73 @@
+{{define "layout"}}<!doctype html>
+<html lang="en" data-theme="{{.Theme}}">
+<head>
+<meta charset="utf-8">
+<title>engram-ui · {{.Title}}</title>
+<link rel="stylesheet" href="/static/css/app.css">
+{{/* In <head>, not before </body>. Deferred scripts run in DOCUMENT ORDER, and
+     the per-page scripts live inside the content block — so from down there they would
+     run AFTER them. heatmap.js asks app.js for the shared activity fetch, got
+     an undefined function, and threw before drawing anything: the dashboard
+     updated on a project switch and the heatmap did not.
+
+     defer means they still execute after parsing, so nothing is blocked; the
+     only thing that changes is that page scripts can now count on app.js and
+     htmx already being there. */}}
+<script src="/static/js/htmx.min.js" defer></script>
+<script src="/static/js/app.js" defer></script>
+</head>
+<body hx-boost="true" hx-target="main" hx-select="main" hx-swap="outerHTML show:window:top">
+<aside class="sidebar">
+  <a class="brand" href="/" title="engram">
+    <img src="/static/img/elephant.png" alt="engram" class="brand-logo">
+  </a>
+  {{/* Above the menu, not at the bottom: the project switcher is a filter on
+       everything below it, so it reads as a heading for the whole sidebar
+       rather than as an afterthought you scroll past the menu to find. */}}
+  <div class="sidebar-head">
+    <form class="project-switcher" action="/set-project" method="get">
+      <select name="project" aria-label="Active project" onchange="this.form.submit()">
+        <option value=""{{if not .CurrentProject}} selected{{end}}>All projects</option>
+        {{range .Projects}}
+        <option value="{{.}}"{{if eq . $.CurrentProject}} selected{{end}}>{{.}}</option>
+        {{end}}
+      </select>
+    </form>
+    {{/* aria-label, not title: title only becomes the accessible name when the
+         element has no content, and this one holds a glyph — which app.js then
+         rewrites, changing the announced name under the user. */}}
+    <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle theme" title="Toggle theme">
+      <span data-theme-icon aria-hidden="true">{{if eq .Theme "dark"}}☾{{else}}☀{{end}}</span>
+    </button>
+  </div>
+  {{/* One navigation at a time. Without this, htmx treats each link as its own
+       request queue: clicking a slow page (Engram Shared fetches from the git
+       remote before it can render) and then clicking elsewhere leaves the
+       first request running, and it swaps <main> on top of wherever you went.
+       Meanwhile clicking the slow link again does nothing visible, because a
+       second request from the SAME element is QUEUED rather than sent — the
+       item just sits there looking stuck.
+
+       "this:replace" makes the whole nav one sync group, so a new click
+       aborts whatever was in flight. */}}
+  <nav hx-sync="this:replace">
+    <a href="/">Dashboard</a>
+    <a href="/projects">Projects</a>
+    <a href="/observations">Observations</a>
+    <a href="/topics">Topic-keys</a>
+    <a href="/conflicts">Conflicts</a>
+    {{/* Prompts and Graph are reachable from where they mean something — the
+         Prompts counter on the dashboard and the per-project row on Projects —
+         rather than from a menu nobody was using. Their routes are unchanged. */}}
+    <a href="/sync">Engram Cloud</a>
+    <a href="/share">Engram Shared</a>
+    <a href="/save">+ New</a>
+  </nav>
+</aside>
+<main>
+{{template "content" .}}
+</main>
+<footer class="text-subtext"><kbd>j</kbd>/<kbd>k</kbd> nav · <kbd>/</kbd> search · <kbd>g</kbd> top · <kbd>?</kbd> help</footer>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,29 @@
+{{define "content"}}
+<h1>Topic · <code class="text-peach">{{.Key}}</code></h1>
+<p class="text-subtext">{{len .Revisions}} matching observation(s).</p>
+
+{{if .Revisions}}
+<ul class="list">
+  {{range $i, $o := .Revisions}}
+  <li class="list-row">
+    <a href="/observations/{{.ID}}">
+      <span class="meta-id">#{{.ID}}</span>
+      <span class="badge">{{.Type}}</span>
+      <span class="row-title">{{.Title}}</span>
+      <span class="text-subtext">{{.Project}}</span>
+      <span class="text-subtext meta-time">{{.CreatedAt}}</span>
+      {{if gt .RevisionCount 1}}<span class="text-green">rev {{.RevisionCount}}</span>{{end}}
+    </a>
+    {{if .Content}}<div class="preview markdown">{{mdsnippet .Content 280}}</div>{{end}}
+    {{if gt $i 0}}
+    {{with index $.Revisions (sub $i 1)}}
+    <a class="text-subtext" href="/diff?a={{.ID}}&b={{$o.ID}}">diff vs #{{.ID}} →</a>
+    {{end}}
+    {{end}}
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="text-subtext">No matches.</p>
+{{end}}
+{{end}}

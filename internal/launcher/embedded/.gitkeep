@@ -1,0 +1,3 @@
+# Build target for scripts/build-engram.sh.
+# The actual engram binary lands here as ./engram or ./engram.exe.
+# Gitignored — never committed.

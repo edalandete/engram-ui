@@ -1,0 +1,174 @@
+{{define "content"}}
+<h1>Conflicts</h1>
+<p class="text-subtext">
+  engram links observations that look like they talk about the same thing, and each link gets a verdict.
+  Most verdicts are harmless — only <code>conflicts_with</code> and <code>supersedes</code> mean something is actually wrong.
+  A link with no verdict yet is <strong>pending</strong>, and pending links block publishing to cloud and to the shared repository.
+</p>
+
+{{/* Counters and the scanner side by side: one says what is there, the other
+     makes more of it. Neither is worth a full row. */}}
+<div class="card-row">
+  {{if .Stats}}
+  <section class="card">
+    <h3>Where the links stand{{if .CurrentProject}} · <code>{{.CurrentProject}}</code>{{end}}</h3>
+    <div class="stats-grid">
+      {{range .Statuses}}
+      <div>
+        <span class="text-subtext" title="{{statusHelp .}}">{{statusLabel .}}</span>
+        <a href="/conflicts?status={{.}}"><strong class="{{if and (eq . "pending") (index $.Stats.ByJudgmentStatus .)}}text-peach{{else}}text-green{{end}}">{{index $.Stats.ByJudgmentStatus .}}</strong></a>
+      </div>
+      {{end}}
+      {{if .Stats.Deferred}}
+      <div>
+        <span class="text-subtext" title="Links that arrived from another machine before the observations they point at. engram retries them automatically.">Waiting for data</span>
+        <strong class="text-peach">{{.Stats.Deferred}}</strong>
+      </div>
+      {{end}}
+      {{if .Stats.Dead}}
+      <div>
+        <span class="text-subtext" title="Links that arrived broken and will never be retried. Harmless, but they will not appear in the list below.">Unusable</span>
+        <strong class="text-red">{{.Stats.Dead}}</strong>
+      </div>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  {{template "scan-status" .}}
+</div>
+
+<nav class="status-tabs">
+  {{range .Statuses}}
+  <a class="tab{{if eq . $.Status}} active{{end}}" href="/conflicts?status={{.}}" title="{{statusHelp .}}">{{statusLabel .}}</a>
+  {{end}}
+</nav>
+
+<form class="search-form" action="/conflicts" method="get">
+  <input type="hidden" name="status" value="{{.Status}}">
+  <select name="relation" aria-label="Verdict filter" onchange="this.form.submit()">
+    <option value=""{{if not .RelationFilter}} selected{{end}}>any verdict</option>
+    {{range .RelationFilters}}
+    <option value="{{.}}"{{if eq . $.RelationFilter}} selected{{end}}>{{.}}</option>
+    {{end}}
+  </select>
+  {{if .RelationFilter}}
+  <span class="text-subtext">{{relationHelp .RelationFilter}}</span>
+  {{else}}
+  <span class="text-subtext">
+    On the <em>judged</em> tab, filtering <code>conflicts_with</code> or <code>supersedes</code> shows the verdicts worth a human read.
+  </span>
+  {{end}}
+</form>
+
+{{/* Collapsed by design. The definitions are needed once, when the vocabulary
+     is new; after that they are six lines of furniture above every list. The
+     working copy lives on the badges themselves, which carry the same text as a
+     tooltip right where a verdict is being read — and the line above already
+     spells out whichever verdict is being filtered. */}}
+<details class="legend-box">
+  <summary class="text-subtext">What do these verdicts mean?</summary>
+  <dl class="legend">
+    {{range .RelationFilters}}
+    <div><dt><code>{{.}}</code></dt><dd class="text-subtext">{{relationHelp .}}</dd></div>
+    {{end}}
+  </dl>
+</details>
+
+{{if .CurrentProject}}<p class="text-subtext">project: <code>{{.CurrentProject}}</code></p>{{end}}
+
+{{if .Page.Relations}}
+<ul class="list">
+  {{range .Page.Relations}}
+  <li class="list-row">
+    <a href="/conflicts/{{.ID}}">
+      <span class="meta-id">#{{.ID}}</span>
+      <span class="badge" title="{{relationHelp .Relation}}">{{.Relation}}</span>
+      <span class="badge status-{{.JudgmentStatus}}" title="{{statusHelp .JudgmentStatus}}">{{statusLabel .JudgmentStatus}}</span>
+      <span class="row-title">{{.SourceTitle}} ↔ {{.TargetTitle}}</span>
+      <span class="text-subtext meta-time">{{.CreatedAt}}</span>
+    </a>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="text-subtext">No conflicts with status "{{.Status}}"{{if .RelationFilter}} and relation "{{.RelationFilter}}"{{end}}.</p>
+{{end}}
+
+{{template "pagination" .}}
+{{end}}
+
+{{/* The scanner card, in its own block because it is also served on its own by
+     GET /conflicts/scan/status while a scan runs. Three states: running (polls
+     itself, no form — one scan at a time), finished (last result, then the form
+     again), and never run (just the form).
+
+     hx-select="unset" because <body> sets hx-select="main" for boosted
+     navigation and this response has no <main> to select — inherited, it swaps
+     in nothing. hx-boost="false" for the same family of reasons. */}}
+{{define "scan-status"}}
+<section class="card scan-form" id="scan-status"
+  {{if and .Scan (not .Scan.Done)}}hx-get="/conflicts/scan/status" hx-trigger="every 2s"
+  hx-target="this" hx-select="unset" hx-swap="outerHTML" hx-boost="false"{{end}}>
+  <h3>Look for new links</h3>
+
+  {{if and .Scan (not .Scan.Done)}}
+  <p class="text-peach" aria-live="polite">⏳ Scanning <code>{{.Scan.Project}}</code> — running for {{.Scan.Elapsed}}.</p>
+  <p class="text-subtext">
+    It keeps going if you leave this page, and this card picks it back up when you return.
+    engram answers everything through a single database connection, so the rest of the UI will feel slow until it finishes.
+  </p>
+  <button type="button" disabled aria-busy="true">Scanning…</button>
+  {{else}}
+
+  {{with .Scan}}
+  {{if .Err}}
+  <p class="text-red">✗ Last scan of <code>{{.Project}}</code> failed on {{.Ended.Format "Jan 2 15:04"}} after {{.Elapsed}}: {{.Err}}</p>
+  {{else}}
+  <p class="text-green">
+    ✓ Scanned <code>{{.Project}}</code> on {{.Ended.Format "Jan 2 15:04"}} in {{.Elapsed}}{{with .Result}} — {{.Inspected}} inspected, {{.CandidatesFound}} candidates,
+    {{.AlreadyRelated}} already linked, <strong>{{.Inserted}} added</strong>, {{.SemanticJudged}} judged by the LLM,
+    {{.SemanticSkipped}} skipped, {{.SemanticErrors}} errored{{if .DryRun}} · dry run, nothing written{{end}}{{if .Capped}} · capped{{end}}{{end}}.
+  </p>
+  {{with .Result}}{{if .Warning}}<p class="text-peach">⚠ {{.Warning}}</p>{{end}}{{end}}
+  {{end}}
+  {{end}}
+
+  <p class="text-subtext">
+    Compares the observations of this project, proposes the pairs that look related and — if you let it — asks your local LLM
+    to judge each one. It only ever adds links: nothing is edited and nothing is deleted.
+  </p>
+  <form action="/conflicts/scan" method="post" hx-disable="true">
+    <div class="verdict-row">
+      <label title="Off = dry run. The scan reports what it would propose and writes nothing.">
+        <input type="checkbox" name="apply" checked> Save the pairs it finds
+      </label>
+      {{/* Disabled rather than left to fail: engram answers a semantic scan
+           without a runner with a 500 whose body is a Go error string. */}}
+      <label title="{{if .AgentCLI}}Runs {{.AgentCLI}} on each pair. Off = every pair is left pending for you to judge by hand.{{else}}Not available: set ENGRAM_AGENT_CLI to claude or opencode — that CLI must be installed and logged in — and restart engram-ui.&#10;Windows: setx ENGRAM_AGENT_CLI opencode&#10;&#10;Without it the scan still works: it proposes pairs and leaves them pending for you.{{end}}">
+        <input type="checkbox" name="semantic"{{if .AgentCLI}} checked{{else}} disabled{{end}}> Let the LLM judge them
+        <span class="text-subtext">{{if .AgentCLI}}({{.AgentCLI}}){{else}}(not configured — hover for how){{end}}</span>
+      </label>
+    </div>
+    <div class="verdict-row">
+      <label title="Upper bound on LLM calls, which is what costs time and money.">Pairs to judge
+        <input type="number" name="max_semantic" min="1" max="500" value="50">
+      </label>
+      {{/* Each one is a whole agent CLI process on this machine, and their
+           writes all go through engram's single database connection. Past a
+           handful the machine — and this UI with it — slows down for no gain,
+           which is why the default is 3 rather than engram's 5. */}}
+      <label title="LLM calls in flight at once. Each is a separate CLI process on this machine and they all write through engram's one database connection, so raising this slows everything down more than it speeds the scan up.">In parallel
+        <input type="number" name="concurrency" min="1" max="20" value="3">
+      </label>
+      <label title="Upper bound on links written to the database in one run.">Pairs to save
+        <input type="number" name="max_insert" min="1" max="1000" value="100">
+      </label>
+    </div>
+    <button type="submit" {{if not .CurrentProject}}disabled{{end}}>
+      {{if .CurrentProject}}Scan <code>{{.CurrentProject}}</code>{{else}}Pick a project first{{end}}
+    </button>
+  </form>
+  {{end}}
+</section>
+{{end}}

@@ -1,0 +1,43 @@
+{{define "content"}}
+<h1>Save observation</h1>
+
+{{/* aria-live: save-suggest.js fills this while you type, and its whole point
+     is warning you that a similar observation already exists. Without it a
+     screen reader never learns the panel appeared. */}}
+<aside id="save-suggest" class="card save-suggest" aria-live="polite"></aside>
+
+<section class="card verdict-form">
+  <form action="/save" method="post" hx-disabled-elt="find button">
+    <div class="verdict-row">
+      <label>Title
+        <input type="text" name="title" required maxlength="200">
+      </label>
+      <label>Type
+        <select name="type">
+          <option value="manual">manual</option>
+          {{range .Types}}<option value="{{.}}">{{.}}</option>{{end}}
+        </select>
+      </label>
+    </div>
+    <div class="verdict-row">
+      <label>Project
+        <input type="text" name="project" value="{{.DefaultProject}}" placeholder="my-project" required>
+      </label>
+      <label>Scope
+        <select name="scope">
+          {{range .Scopes}}<option value="{{.}}">{{.}}</option>{{end}}
+        </select>
+      </label>
+    </div>
+    <label>Topic key (optional, e.g. <code>architecture/auth-model</code>)
+      <input type="text" name="topic_key" placeholder="family/short-id">
+    </label>
+    <label>Content
+      <textarea name="content" rows="14" required placeholder="**What**: ...&#10;**Why**: ...&#10;**Where**: ...&#10;**Learned**: ..."></textarea>
+    </label>
+    <button type="submit">Save</button>
+  </form>
+</section>
+
+<script src="/static/js/save-suggest.js" defer></script>
+{{end}}

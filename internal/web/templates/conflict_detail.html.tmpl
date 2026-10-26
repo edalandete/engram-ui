@@ -1,0 +1,48 @@
+{{define "content"}}
+{{with .Conflict}}
+<h1>Conflict #{{.RelationID}}</h1>
+
+<section class="metadata">
+  <div><span class="text-subtext">Sync ID</span><code>{{.SyncID}}</code></div>
+  <div><span class="text-subtext">Current relation</span><span class="badge">{{.Relation}}</span></div>
+  <div><span class="text-subtext">Judgment status</span><span class="badge status-{{.JudgmentStatus}}">{{.JudgmentStatus}}</span></div>
+  <div><span class="text-subtext">Created</span><span>{{.CreatedAt}}</span></div>
+</section>
+
+<section class="conflict-diff">
+  <div class="card">
+    <h3>Source <a class="text-subtext" href="/observations/{{.SourceID}}">→ open</a></h3>
+    <code class="text-subtext">{{.SourceID}}</code>
+    <pre class="preview">{{.SourceSnippet}}</pre>
+  </div>
+  <div class="card">
+    <h3>Target <a class="text-subtext" href="/observations/{{.TargetID}}">→ open</a></h3>
+    <code class="text-subtext">{{.TargetID}}</code>
+    <pre class="preview">{{.TargetSnippet}}</pre>
+  </div>
+</section>
+
+<section class="card verdict-form">
+  <h3>Record verdict</h3>
+  <form action="/conflicts/{{.RelationID}}/judge" method="post">
+    <input type="hidden" name="sync_id" value="{{.SyncID}}">
+    <div class="verdict-row">
+      <label>Relation
+        <select name="relation" required>
+          {{range $.Relations}}
+          <option value="{{.}}"{{if eq . $.Conflict.Relation}} selected{{end}}>{{.}}</option>
+          {{end}}
+        </select>
+      </label>
+      <label>Confidence
+        <input type="number" name="confidence" min="0" max="1" step="0.05" value="0.9">
+      </label>
+    </div>
+    <label>Reason (optional)
+      <textarea name="reason" rows="3" placeholder="Brief explanation"></textarea>
+    </label>
+    <button type="submit">Save verdict</button>
+  </form>
+</section>
+{{end}}
+{{end}}

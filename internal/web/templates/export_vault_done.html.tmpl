@@ -1,0 +1,11 @@
+{{define "content"}}
+<h1>Export complete</h1>
+<section class="card">
+  <p>Wrote <strong class="text-green">{{.Written}}</strong> of {{.Total}} observation(s) to:</p>
+  <pre class="preview"><code>{{.Vault}}</code></pre>
+</section>
+<nav class="actions">
+  <a class="action-btn" href="/export-vault">Export again</a>
+  <a class="action-btn" href="/">Dashboard</a>
+</nav>
+{{end}}

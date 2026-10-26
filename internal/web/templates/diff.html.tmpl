@@ -1,0 +1,16 @@
+{{define "content"}}
+<h1>Diff <a href="/observations/{{.A.ID}}">#{{.A.ID}}</a> ↔ <a href="/observations/{{.B.ID}}">#{{.B.ID}}</a></h1>
+
+<section class="metadata">
+  <div><span class="text-subtext">A</span><strong>{{.A.Title}}</strong></div>
+  <div><span class="text-subtext">A created</span><span>{{.A.CreatedAt}}</span></div>
+  <div><span class="text-subtext">B</span><strong>{{.B.Title}}</strong></div>
+  <div><span class="text-subtext">B created</span><span>{{.B.CreatedAt}}</span></div>
+  {{if .A.TopicKey}}<div><span class="text-subtext">Topic key</span><a href="/topics/{{.A.TopicKey}}"><code>{{.A.TopicKey}}</code></a></div>{{end}}
+</section>
+
+<section class="card content-block">
+  <pre class="diff">{{range .Lines}}<span class="diff-{{if eq .Sign "+"}}add{{else if eq .Sign "-"}}del{{else}}ctx{{end}}">{{.Sign}} {{.Text}}</span>
+{{end}}</pre>
+</section>
+{{end}}

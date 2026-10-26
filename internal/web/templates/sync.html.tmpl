@@ -1,0 +1,162 @@
+{{define "content"}}
+<h1>Engram Cloud</h1>
+<p class="text-subtext">Replicate this project's local observations to the engram cloud. Local SQLite stays the source of truth — cloud is opt-in.</p>
+
+{{with .Result}}
+{{if .Blocked}}
+<section class="card sync-result error">
+  <p><span class="text-peach">⚠</span> <strong>{{.Message}}</strong></p>
+  {{/* Guarded like the shared-repo panel: a blocked result with no conflict
+       count has nowhere to send you, and "Review 0 conflict(s)" is a link to
+       an empty list. */}}
+  {{if .PendingCount}}
+  <nav class="actions"><a href="/conflicts?status=pending">Review {{.PendingCount}} conflict(s) →</a></nav>
+  {{end}}
+</section>
+{{else}}
+<section class="card sync-result {{if .OK}}ok{{else}}error{{end}}">
+  <p>{{if .OK}}<span class="text-green">✓</span>{{else}}<span class="text-red">✗</span>{{end}} <strong>{{.Message}}</strong></p>
+  {{if .Output}}<pre>{{.Output}}</pre>{{end}}
+</section>
+{{end}}
+{{end}}
+
+{{/* ── the server everything else talks to, so it comes first ────────────
+     Without one, nothing below can do anything: push, pull, enroll and
+     repair all need somewhere to talk to. So the rest of the page is not
+     just disabled, it is not rendered — a screen of dead buttons teaches
+     nobody what the missing piece is. */}}
+<section class="card verdict-form">
+  <h3>Cloud server</h3>
+  {{if not .CloudServer}}
+  <p class="text-peach">⚠ No cloud server configured. Set one here to unlock push, pull, enrollment and repair.</p>
+  {{end}}
+  <p class="text-subtext">URL of the engram cloud server. Saved to <code>~/.engram/cloud.json</code> and reused on next launch. For a local insecure cloud, no token is needed.</p>
+  <form action="/sync/config" method="post" hx-disabled-elt="find button">
+    <label>Server URL
+      <input type="text" name="server" value="{{.CloudServer}}" placeholder="http://127.0.0.1:18080" required>
+    </label>
+    <nav class="actions sync-actions">
+      <button type="submit">{{if .CloudServer}}Update cloud server{{else}}Set cloud server{{end}}</button>
+    </nav>
+  </form>
+  {{if .CloudServer}}
+  {{/* engram's CLI refuses an empty --server, so without this the field is a
+       one-way door: settable and changeable, never clearable. */}}
+  {{/* hx-confirm, not onsubmit — see the note on the disconnect form in
+       share.html.tmpl: under hx-boost an inline handler cannot cancel it. */}}
+  <form action="/sync/unlink" method="post" hx-disabled-elt="find button"
+        hx-confirm="Forget the cloud server? Nothing is deleted — local memories stay, and the cloud keeps whatever you pushed. Cloud push and pull stop working until you set a server again.">
+    <nav class="actions sync-actions">
+      <button type="submit" class="secondary">✕ Clear server URL</button>
+    </nav>
+  </form>
+  {{end}}
+</section>
+
+{{if .CloudServer}}
+
+{{if not .SyncProject}}
+<section class="card error">
+  <p class="text-peach">⚠ No project selected. Pick a project in the left switcher to push, pull, or enroll.</p>
+</section>
+{{end}}
+
+{{/* ── setup row: [enroll] · background status ──────────────────────── */}}
+<div class="sync-setup-row">
+  {{/* left: enroll project (optional — push/pull auto-enroll) */}}
+  <section class="card verdict-form sync-setup-box">
+    <div class="sync-setup-part">
+      <h3>Enrollment</h3>
+      <p class="text-subtext">A project is enrolled once before its first sync — a persistent local flag, no network call. <strong>You don't have to do this manually: Push and Pull auto-enroll.</strong> Use this only to enroll without syncing yet.</p>
+      <form action="/sync/enroll" method="post" hx-disabled-elt="find button">
+        <button type="submit" class="secondary"{{if not .SyncProject}} disabled{{end}}>{{if .SyncProject}}Enroll <code>{{.SyncProject}}</code> now{{else}}Pick a project to enroll{{end}}</button>
+      </form>
+    </div>
+  </section>
+
+  {{/* right: background status (wider) */}}
+  <section class="card">
+    <h3>Background sync status{{if .SyncProject}} · <code>{{.SyncProject}}</code>{{end}}</h3>
+    {{if .StatusErr}}
+      <p class="text-red">Status unavailable: {{.StatusErr}}</p>
+    {{else if .Status}}
+      {{with .Status}}
+      {{if .Enabled}}
+        <p>
+          <span class="badge sync-phase-{{.Phase}}">{{.Phase}}</span>
+          {{if .LastSyncAt}}<span class="text-subtext">last sync {{.LastSyncAt}}</span>{{end}}
+        </p>
+        <div class="stats-grid">
+          <div><span class="text-subtext">consecutive failures</span><strong{{if .ConsecutiveFailures}} class="text-red"{{end}}>{{.ConsecutiveFailures}}</strong></div>
+          <div><span class="text-subtext">deferred</span><strong>{{.DeferredCount}}</strong></div>
+          <div><span class="text-subtext">dead</span><strong{{if .DeadCount}} class="text-red"{{end}}>{{.DeadCount}}</strong></div>
+        </div>
+        {{if .LastError}}<p class="text-red">last error: {{.LastError}}</p>{{end}}
+        {{if .ReasonMessage}}<p class="text-peach">{{.ReasonCode}}: {{.ReasonMessage}}</p>{{end}}
+      {{else}}
+        <p><span class="badge status-orphaned">background sync off</span></p>
+        <p class="text-subtext">{{if .Message}}{{.Message}}{{else}}Autosync isn't running. Use the manual push/pull buttons below, or start engram with ENGRAM_CLOUD_AUTOSYNC=1 for continuous sync.{{end}}</p>
+      {{end}}
+      {{end}}
+    {{else}}
+      <p class="text-subtext">No status reported.</p>
+    {{end}}
+  </section>
+</div>
+
+{{/* ── manual push / pull ──────────────────────────────────────────── */}}
+<section class="card">
+  <h3>Manual sync</h3>
+  <p class="text-subtext">Push exports {{if .SyncProject}}<code>{{.SyncProject}}</code>{{else}}the selected project{{end}} to cloud. Pull imports new remote chunks. Both auto-enroll the project first.</p>
+  {{if gt .PendingConflicts 0}}
+  <p class="text-peach">⚠ Push is disabled: {{.PendingConflicts}} unresolved conflict(s). <a href="/conflicts?status=pending">Resolve them</a> first.</p>
+  {{end}}
+  <nav class="actions sync-actions">
+    <form action="/sync/push" method="post" hx-disabled-elt="find button">
+      <button type="submit"{{if or (not .SyncProject) (gt .PendingConflicts 0)}} disabled{{end}}>↑ Push now</button>
+    </form>
+    <form action="/sync/pull" method="post" hx-disabled-elt="find button">
+      <button type="submit" class="secondary"{{if not .SyncProject}} disabled{{end}}>↓ Pull now</button>
+    </form>
+  </nav>
+</section>
+
+{{/* ── selective pull (by user) ─────────────────────────────────────── */}}
+<section class="card verdict-form">
+  <h3>Selective pull</h3>
+  <p class="text-subtext">Pull only part of {{if .SyncProject}}<code>{{.SyncProject}}</code>{{else}}the project{{end}}: everything, or just one contributor's chunks (filtered by who pushed them). Applies via a local import. Note: bypasses cloud enrollment/health tracking.</p>
+  <form action="/sync/pull-selective" method="post" hx-disabled-elt="find button" class="pull-selective">
+    <label class="verdict-row">
+      <input type="radio" name="mode" value="total" checked> Pull total — every chunk in the project
+    </label>
+    {{if .SyncProject}}
+    {{/* Lazy-loaded: building this list downloads every cloud chunk, so it
+         fetches after paint instead of blocking page entry. */}}
+    <div id="pull-users" hx-get="/sync/pull-users" hx-trigger="load"
+         hx-target="this" hx-select="unset" hx-swap="outerHTML" hx-boost="false">
+      <p class="text-subtext">Loading contributors…</p>
+    </div>
+    {{else}}
+    <p class="text-subtext">Pick a project to list contributors.</p>
+    {{end}}
+    <nav class="actions sync-actions">
+      <button type="submit"{{if not .SyncProject}} disabled{{end}}>↓ Selective pull</button>
+    </nav>
+  </form>
+</section>
+
+{{/* ── repair: force full re-upload ──────────────────────────────────── */}}
+<section class="card verdict-form">
+  <h3>Repair · force re-upload</h3>
+  <p class="text-subtext">If the cloud server was reset or pushes were interrupted, this machine can wrongly believe everything is already uploaded and report "nothing to sync". This clears {{if .SyncProject}}<code>{{.SyncProject}}</code>{{else}}the project{{end}}'s local sync bookkeeping so the next <strong>Push</strong> re-uploads everything. It does <strong>not</strong> delete any observations.</p>
+  <form action="/sync/resync" method="post" hx-disabled-elt="find button"
+        hx-confirm="Reset cloud sync state for this project? No observations are deleted. The next Push will re-upload everything local.">
+    <nav class="actions sync-actions">
+      <button type="submit" class="secondary"{{if not .SyncProject}} disabled{{end}}>⟳ Reset sync state{{if .SyncProject}} for {{.SyncProject}}{{end}}</button>
+    </nav>
+  </form>
+</section>
+
+{{end}}
+{{end}}

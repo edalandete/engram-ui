@@ -1,0 +1,52 @@
+{{define "content"}}
+<h1>Timeline · #{{.Focus.ID}}</h1>
+
+<section class="timeline">
+  <div class="timeline-side">
+    <h3 class="text-subtext">Before</h3>
+    {{if .Before}}
+    <ul class="list">
+      {{range .Before}}
+      <li class="list-row small">
+        <a href="/observations/{{.ID}}">
+          <span class="meta-id">#{{.ID}}</span>
+          <span class="badge">{{.Type}}</span>
+          <span class="row-title">{{.Title}}</span>
+        </a>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}<p class="text-subtext">none</p>{{end}}
+  </div>
+
+  <div class="timeline-focus card">
+    <h3 class="text-lavender">Focus</h3>
+    <div class="metadata">
+      <div><span class="text-subtext">ID</span><span>#{{.Focus.ID}}</span></div>
+      <div><span class="text-subtext">Type</span><span class="badge">{{.Focus.Type}}</span></div>
+      <div><span class="text-subtext">Title</span><strong>{{.Focus.Title}}</strong></div>
+      {{if .Focus.Project}}<div><span class="text-subtext">Project</span><span>{{.Focus.Project}}</span></div>{{end}}
+      <div><span class="text-subtext">Created</span><span>{{.Focus.CreatedAt}}</span></div>
+    </div>
+    {{if .Focus.Content}}<pre class="preview">{{snippet .Focus.Content 600}}</pre>{{end}}
+    <a href="/observations/{{.Focus.ID}}">Open detail →</a>
+  </div>
+
+  <div class="timeline-side">
+    <h3 class="text-subtext">After</h3>
+    {{if .After}}
+    <ul class="list">
+      {{range .After}}
+      <li class="list-row small">
+        <a href="/observations/{{.ID}}">
+          <span class="meta-id">#{{.ID}}</span>
+          <span class="badge">{{.Type}}</span>
+          <span class="row-title">{{.Title}}</span>
+        </a>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}<p class="text-subtext">none</p>{{end}}
+  </div>
+</section>
+{{end}}

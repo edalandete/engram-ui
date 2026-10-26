@@ -1,0 +1,60 @@
+{{define "content"}}
+<h1>Topic-keys</h1>
+<p class="text-subtext">
+  Scanned {{.Scanned}} recent observations{{if .CurrentProject}} · project: <code>{{.CurrentProject}}</code>{{end}}
+  · <a href="/topics?scan=2000">scan more</a>
+</p>
+
+{{if .Groups}}
+{{range .Groups}}
+<section class="card">
+  <h3>{{.Family}}</h3>
+  <ul class="list">
+    {{range .Keys}}
+    <li class="list-row small">
+      <a href="/topics/{{.Key}}">
+        <code class="text-peach">{{.Key}}</code>
+        <span class="row-title">{{.Title}}</span>
+        <span class="badge">{{.Type}}</span>
+        <span class="text-subtext">{{.Project}}</span>
+        {{if gt .RevisionCount 1}}<span class="text-green">{{.RevisionCount}} revs</span>{{end}}
+        <span class="text-subtext meta-time">{{.UpdatedAt}}</span>
+      </a>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+{{else}}
+<p class="text-subtext">No topic-keys found in the scanned window.</p>
+{{end}}
+
+{{/* The other half of "topic-key coverage": the observations that have none.
+     A key is what makes a memory updatable instead of duplicated, so this is
+     the to-do list, and it lives here rather than on the dashboard where only
+     five of them fitted. */}}
+{{if .UntaggedCount}}
+<section class="card">
+  <h3>Without a topic-key · {{.UntaggedCount}}</h3>
+  <p class="text-subtext">
+    These are saved but not addressable: a new save on the same subject will pile up next to them instead of revising them.
+    Open one and set a key like <code>architecture/auth-model</code> to fold future versions into it.
+  </p>
+  <ul class="list">
+    {{range .Untagged}}
+    <li class="list-row small">
+      <a href="/observations/{{.ID}}">
+        <span class="meta-id">#{{.ID}}</span>
+        <span class="badge">{{.Type}}</span>
+        <span class="row-title">{{.Title}}</span>
+        <span class="text-subtext meta-time">{{.CreatedAt}}</span>
+      </a>
+    </li>
+    {{end}}
+  </ul>
+  {{if gt .UntaggedCount (len .Untagged)}}
+  <p class="text-subtext">Showing {{len .Untagged}} of {{.UntaggedCount}}.</p>
+  {{end}}
+</section>
+{{end}}
+{{end}}

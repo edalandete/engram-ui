@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "engram": {
+      "type": "stdio",
+      "command": "./internal/launcher/embedded/engram.exe",
+      "args": ["mcp"]
+    }
+  }
+}

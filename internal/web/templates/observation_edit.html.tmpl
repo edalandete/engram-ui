@@ -1,0 +1,54 @@
+{{define "content"}}
+{{with .Obs}}
+<h1>Edit #{{.ID}}</h1>
+
+<section class="card verdict-form">
+  <form action="/observations/{{.ID}}/edit" method="post">
+    <div class="verdict-row">
+      <label>Title
+        <input type="text" name="title" value="{{.Title}}" required maxlength="200">
+      </label>
+      <label>Type
+        <select name="type">
+          {{range $.Types}}
+          <option value="{{.}}"{{if eq . $.Obs.Type}} selected{{end}}>{{.}}</option>
+          {{end}}
+        </select>
+      </label>
+    </div>
+    <div class="verdict-row">
+      <label>Project
+        <input type="text" name="project" value="{{.Project}}">
+      </label>
+      <label>Scope
+        <select name="scope">
+          <option value=""></option>
+          {{range $.Scopes}}
+          <option value="{{.}}"{{if eq . $.Obs.Scope}} selected{{end}}>{{.}}</option>
+          {{end}}
+        </select>
+      </label>
+    </div>
+    <label>Topic key
+      <input type="text" name="topic_key" value="{{.TopicKey}}">
+    </label>
+    <label>Content
+      <textarea name="content" rows="20" required>{{.Content}}</textarea>
+    </label>
+    <button type="submit">Save</button>
+    <a class="action-btn" href="/observations/{{.ID}}">Cancel</a>
+  </form>
+</section>
+
+<section class="card">
+  <h3 class="text-red">Danger zone</h3>
+  {{/* hx-confirm, not onsubmit — under hx-boost an inline handler returning
+       false cancels the native submit but not htmx's request, so Cancel
+       deleted the observation anyway. */}}
+  <form action="/observations/{{.ID}}/delete" method="post"
+        hx-confirm="Soft-delete observation #{{.ID}}?">
+    <button class="action-btn" type="submit">Delete</button>
+  </form>
+</section>
+{{end}}
+{{end}}

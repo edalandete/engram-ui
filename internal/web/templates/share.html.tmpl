@@ -1,0 +1,293 @@
+{{/* Vocabulary: this screen speaks the user's language, not engram's. What the
+     code (and engram) calls a CHUNK is called a "commit" here, and a MEMORY is
+     called an "observation" — the words the rest of the app and the dashboard
+     already use. The mapping is one-to-one in practice: a publish writes one
+     chunk and one commit. Keep the data model's names in Go and the user's
+     names in here; don't let either leak into the other. */}}
+{{define "content"}}
+<h1>Engram Shared</h1>
+<p class="text-subtext">Share observations through a git repository instead of a cloud server. Publish the projects you choose, pull the ones you care about.</p>
+
+{{if .ShareUnavailable}}
+<section class="card error">
+  <p class="text-peach">⚠ No <code>git</code> on PATH. Install it and restart engram-ui.</p>
+</section>
+{{else}}
+
+{{with .Result}}
+{{if .Blocked}}
+<section class="card sync-result error">
+  <p><span class="text-peach">⚠</span> <strong>{{.Message}}</strong></p>
+  {{/* Two things block a publish now — unresolved conflicts, and a full
+       re-export from a clone that is behind — and only the first has anywhere
+       to send you. Without the guard the second rendered "Review 0
+       conflict(s)" pointing at an empty list. */}}
+  {{if .PendingCount}}
+  <nav class="actions"><a href="/conflicts?status=pending">Review {{.PendingCount}} conflict(s) →</a></nav>
+  {{end}}
+  {{if .Output}}<pre>{{.Output}}</pre>{{end}}
+</section>
+{{else}}
+<section class="card sync-result {{if .OK}}ok{{else}}error{{end}}">
+  <p>{{if .OK}}<span class="text-green">✓</span>{{else}}<span class="text-red">✗</span>{{end}} <strong>{{.Message}}</strong></p>
+  {{if .Output}}<pre>{{.Output}}</pre>{{end}}
+</section>
+{{end}}
+{{end}}
+
+{{if not .Repos}}
+{{/* ── first run: connect a repository ──────────────────────────────── */}}
+<section class="card verdict-form repo-connect">
+  <h3>Connect a repository</h3>
+  <p class="text-subtext">Cloned once into <code>{{.RepoDir}}</code>. Uses your own git credentials — nothing is stored here.</p>
+  <form action="/share/setup" method="post" hx-disabled-elt="find button">
+    <label>Repository URL
+      <input type="text" name="repo" placeholder="git@github.com:acme/engram-memories.git" required>
+    </label>
+    <nav class="actions sync-actions">
+      <button type="submit">Connect</button>
+    </nav>
+  </form>
+  <p class="text-peach">⚠ Use a private repository. There is no encryption, and <code>personal</code>-scoped observations are published with the rest.</p>
+</section>
+
+{{else}}
+{{/* Connected and Publish side by side: one states where you are pointed, the
+     other is a single button. Neither fills a row on its own. */}}
+<div class="card-row">
+{{/* ── connected ─────────────────────────────────────────────────────── */}}
+<section class="card">
+  <h3>Connected</h3>
+  {{range .Repos}}
+  <p><code>{{.URL}}</code></p>
+  <p class="text-subtext">Local clone: <code>{{.Dir}}</code>{{if .Size}} · {{.Size}} on disk{{end}}</p>
+
+  {{/* hx-confirm, not onsubmit: the body is hx-boost="true", so htmx handles
+       the submit and an inline handler returning false only cancels the native
+       one — htmx fires its request regardless and Cancel did nothing. */}}
+  <form action="/share/disconnect" method="post" hx-disabled-elt="find button"
+        hx-confirm="Remove the local clone of {{.URL}}? Nothing is lost: published observations stay in the remote, imported ones stay in your database, and this machine keeps its record of what it has applied and published. Projects assigned to it become unassigned.">
+    <input type="hidden" name="repo" value="{{.ID}}">
+    <nav class="actions sync-actions">
+      <button type="submit" class="secondary">Disconnect</button>
+    </nav>
+  </form>
+  {{end}}
+
+  <form action="/share/setup" method="post" class="verdict-form repo-connect" hx-disabled-elt="find button">
+    <label>Add another repository
+      <input type="text" name="repo" placeholder="git@github.com:acme/engram-memories.git" required>
+    </label>
+    <nav class="actions sync-actions">
+      <button type="submit">Connect</button>
+    </nav>
+  </form>
+</section>
+
+{{/* ── publish ───────────────────────────────────────────────────────── */}}
+<section class="card">
+  <h3>Publish{{if .SyncProject}} · <code>{{.SyncProject}}</code>{{end}}</h3>
+  {{if not .SyncProject}}
+  <p class="text-peach">⚠ No project selected. Pick one in the left switcher to publish it.</p>
+  {{else}}
+  {{/* With one repository there is nothing to choose: every project goes
+       there. With several, a project publishes to the one picked here, else
+       to the only one already holding it — and is never guessed beyond that. */}}
+  {{if gt (len .Repos) 1}}
+  <form action="/share/assign" method="post" class="verdict-form" hx-disabled-elt="find button">
+    <label>Publishes to
+      <select name="repo">
+        {{if not .ProjectRepo}}<option value="" selected disabled>— pick a repository —</option>{{end}}
+        {{range .Repos}}<option value="{{.ID}}"{{if eq .ID $.ProjectRepo}} selected{{end}}>{{.URL}}</option>{{end}}
+      </select>
+    </label>
+    <nav class="actions sync-actions">
+      <button type="submit" class="secondary">Save</button>
+    </nav>
+  </form>
+  {{if not .ProjectRepo}}
+  <p class="text-peach">⚠ <code>{{.SyncProject}}</code> has no repository yet. Pick the one it publishes to — everyone with access to it will read this project.</p>
+  {{end}}
+  {{end}}
+  {{/* "what you have written" was wrong twice: the export matches updated_at
+       as well as created_at, and filters by project only, never by author.
+       The old text also described the pull step, which readers took to mean
+       publishing imports their teammates' work — it does not. Dropped rather
+       than qualified: the shortest way to stop implying something is to stop
+       mentioning it. The two warnings above cover the cases that need words. */}}
+  <p class="text-subtext">Sends what you created or edited here since your last publish — editing an old observation counts.{{if .PublishedHere}} Already in the repository.{{end}}</p>
+  {{end}}
+  {{if gt .PendingConflicts 0}}
+  <p class="text-peach">⚠ Publishing is disabled: {{.PendingConflicts}} unresolved conflict(s). <a href="/conflicts?status=pending">Resolve them</a> first.</p>
+  {{end}}
+  {{/* Nobody has published this project — not you, not a teammate. Worth
+       stating outright: it is the moment the project first leaves this
+       machine, and until the button is pressed the repository has no idea it
+       exists. Mutually exclusive with the warning below, which is about a
+       project that IS in the repository but has no record of coming from
+       here. */}}
+  {{if .NeverPublished}}
+  <p class="text-peach">⚠ <code>{{.SyncProject}}</code> has never been published to this repository — by you or by anyone. Publishing creates it and uploads the project in full; from then on your teammates see it in the table below and can pull it.</p>
+  {{end}}
+  {{/* An empty ledger stages an empty view, so the first publish from any
+       machine re-sends the whole project. Say it before the button is
+       pressed, not after. */}}
+  {{if .FirstPublishHere}}
+  <p class="text-peach">⚠ This machine has no record of publishing <code>{{.SyncProject}}</code>, so this publish re-sends the whole project. Expected the first time, and once only. Nobody ends up with duplicate observations; only the repository grows.</p>
+  {{end}}
+  {{/* Being behind is what makes a full re-export destructive: it sends your
+       copy of every observation, and the import takes the last writer without
+       comparing dates, so a correction made while you were behind is undone
+       for everyone. Only bites when this publish would be a full one. */}}
+  {{if gt .UnappliedCommits 0}}
+  <p class="text-peach">⚠ {{.UnappliedCommits}} commit(s) here are not applied on this machine. <strong>Pull <code>{{.SyncProject}}</code> first</strong> — the table below has the button. Until then a full re-export is refused, because it would replace other people's newer observations with your older copies.</p>
+  {{end}}
+  {{/* Offered for as long as the commit is held, not only on the blocked
+       banner: engram never re-exports the same content, so once the banner is
+       gone this button is the only way to publish it. */}}
+  {{if .Quarantined}}
+  <p class="text-peach">⚠ A commit of <code>{{.SyncProject}}</code> was held back by this repository's screening. Fix the observations it listed and publish again, or publish it as it is if the findings are false alarms.</p>
+  {{end}}
+  <nav class="actions sync-actions">
+    <form action="/share/push" method="post" hx-disabled-elt="find button">
+      <button type="submit"{{if or (not .SyncProject) (not .ProjectRepo) (gt .PendingConflicts 0) (and .FirstPublishHere (gt .UnappliedCommits 0))}} disabled{{end}}>↑ Publish now</button>
+    </form>
+    {{if .Quarantined}}
+    <form action="/share/publish-anyway" method="post" hx-disabled-elt="find button">
+      <button type="submit">Publish held-back commit anyway</button>
+    </form>
+    {{end}}
+  </nav>
+</section>
+</div>
+
+{{/* ── what's in each repo ──────────────────────────────────────────── */}}
+{{range $repo := .Repos}}
+<section class="card">
+  <h3>Projects in the repository{{if gt (len $.Repos) 1}} · <code>{{$repo.URL}}</code>{{end}}</h3>
+  {{if .RefreshErr}}
+    <p class="text-peach">⚠ Showing the last known state — could not reach the remote: {{.RefreshErr}}</p>
+  {{end}}
+  {{if .ProjectsErr}}
+    <p class="text-red">Could not read the clone: {{.ProjectsErr}}</p>
+  {{else if .Projects}}
+  {{/* Reuses .proj-table so this looks like the Projects screen; .share-table
+       only undoes its right-alignment, since here just the first two columns
+       are numbers. */}}
+  <table class="proj-table share-table">
+    <thead><tr><th>Project</th><th>Commits</th><th>Observations</th><th>Contributors</th><th>Last publish</th><th>Missing here</th></tr></thead>
+    <tbody>
+      {{range .Projects}}
+      <tr>
+        <td><code>{{.Name}}</code></td>
+        <td>{{.Chunks}}</td>
+        <td class="text-subtext">{{.Memories}}</td>
+        {{/* A team repo can hold dozens of contributors, and spelling them all
+             out would let one column push the action off screen. Show a few,
+             count the rest, keep the full list in the tooltip. */}}
+        <td class="text-subtext" title="{{range $i, $c := .Contributors}}{{if $i}}, {{end}}{{$c}}{{end}}">
+          {{range $i, $c := .Contributors}}{{if lt $i 3}}{{if $i}}, {{end}}{{$c}}{{end}}{{end}}
+          {{if gt (len .Contributors) 3}}<span class="text-subtext">+{{sub (len .Contributors) 3}} more</span>{{end}}
+        </td>
+        <td class="text-subtext">{{.LastUpdate}}</td>
+        {{/* The button only exists where there is something to fetch: a row you
+             already have needs no action, and offering one anyway is what made
+             the whole table read as undifferentiated work.
+
+             Three states, not two, because "new observations" and "unapplied
+             commits" are different questions and only counting the first hides
+             work. NewMemories counts sync_ids you do not have at all; an EDITED
+             observation you already hold — a corrected topic-key, a fixed title
+             — is not new by that measure and scores zero. Gating on it alone
+             would silently strip a teammate's corrections out of the UI.
+             Gating on chunks alone gave the nonsense "Pull 0 new observations".
+             So: say which it is, and never hide either. */}}
+        <td>
+          {{if .NewMemories}}
+          <div class="sync-actions">
+            <form action="/share/pull" method="post" hx-disabled-elt="find button">
+              <input type="hidden" name="project" value="{{.Name}}">
+              <input type="hidden" name="repo" value="{{$repo.ID}}">
+              <button type="submit">↓ Pull {{.NewMemories}} new observation{{if ne .NewMemories 1}}s{{end}}</button>
+            </form>
+          </div>
+          {{else if .NewChunks}}
+          <div class="sync-actions">
+            <form action="/share/pull" method="post" hx-disabled-elt="find button">
+              <input type="hidden" name="project" value="{{.Name}}">
+              <input type="hidden" name="repo" value="{{$repo.ID}}">
+              <button type="submit" class="secondary" title="These commits carry no observation you are missing, but they may carry edits to ones you already have. They also show up after reconnecting a repository, when this clone has simply forgotten what it had applied.">↓ Pull {{.NewChunks}} commit{{if ne .NewChunks 1}}s{{end}} · edits only</button>
+            </form>
+          </div>
+          {{else}}
+          <span class="text-green">✓ up to date</span>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{range .Projects}}{{if .Silent}}
+  <p class="text-peach">⚠ In <code>{{.Name}}</code>, {{range $i, $c := .Silent}}{{if $i}}, {{end}}<strong>{{$c}}</strong>{{end}} {{if gt (len .Silent) 1}}have{{else}}has{{end}} published without a single observation landing — their push succeeded and nothing warned them. Ask them to update engram-ui and publish again: it now re-sends the whole project by itself when none of their observations are here.</p>
+  {{end}}{{end}}
+  {{/* Was three sentences, one of them false: it promised this number equals
+       your dashboard's after pulling, which only holds if you have nothing
+       unpublished of your own. */}}
+  <p class="text-subtext">Distinct observations in the repository, and how many of them this machine has not imported. Your own publications never count as missing; anything imported outside this panel does, until you pull it once.</p>
+  {{else}}
+    <p class="text-subtext">Nothing published yet. Be the first — pick a project and press Publish.</p>
+  {{end}}
+</section>
+{{end}}
+
+{{/* ── selective pull ────────────────────────────────────────────────── */}}
+{{/* Same shape as the cloud panel's selective pull, on purpose: two radios and
+     a contributor dropdown. Unlike the cloud one it needs no lazy loading —
+     the manifest is already on disk, so there is nothing slow to defer. */}}
+<section class="card verdict-form">
+  <h3>Selective pull{{if .SyncProject}} · <code>{{.SyncProject}}</code>{{end}}</h3>
+  <p class="text-subtext">Bring in everything, or only what one person published. Filtering by contributor can leave you an older copy of an observation someone else corrected, so it is for a one-off, not for staying in sync.</p>
+  <form action="/share/pull-selective" method="post" class="pull-selective" hx-disabled-elt="find button">
+    <input type="hidden" name="project" value="{{.SyncProject}}">
+    <input type="hidden" name="repo" value="{{.ProjectRepo}}">
+    <label class="verdict-row">
+      <input type="radio" name="mode" value="total" checked> Pull total — every commit in the project
+    </label>
+    {{if .SyncProject}}
+    <label class="verdict-row">
+      <input type="radio" name="mode" value="user"{{if not .Contributors}} disabled{{end}}> Pull by contributor:
+    </label>
+    <select name="created_by"{{if not .Contributors}} disabled{{end}}>
+      {{if .Contributors}}
+        {{range .Contributors}}
+        <option value="{{.User}}">{{.User}} — {{.Memories}} observations in {{.Chunks}} commit(s){{if .New}} · {{.New}} to pull{{end}}</option>
+        {{end}}
+      {{else}}
+        <option value="">(not published to this repository yet)</option>
+      {{end}}
+    </select>
+    {{else}}
+    <p class="text-subtext">Pick a project to list contributors.</p>
+    {{end}}
+    <nav class="actions sync-actions">
+      <button type="submit"{{if or (not .SyncProject) (not .ProjectRepo)}} disabled{{end}}>↓ Selective pull</button>
+    </nav>
+  </form>
+</section>
+
+{{/* ── what this transport does not do ───────────────────────────────── */}}
+<section class="card">
+  <h3>Known limits</h3>
+  <ul class="text-subtext">
+    <li><strong>Soft-delete travels, hard delete doesn't</strong> — and a republish by anyone brings hard-deleted observations back.</li>
+    <li><strong>No encryption.</strong> <code>personal</code> observations are published too. The repository's access control is the only boundary.</li>
+    <li><strong>Nothing happens on its own.</strong> Publishing and pulling are always a button.</li>
+    <li><strong>A pull is last-writer-wins, not newest-wins.</strong> engram applies whatever the commit says without comparing timestamps, so pulling an old commit can replace your copy of an observation with an earlier version of it. Edits reach everyone, but the last pull decides.</li>
+    <li><strong>The repository grows faster than the project</strong>, because a full re-export duplicates what is already there.</li>
+    <li><strong>One transport per project.</strong> Mixing this with the cloud stores everything twice.</li>
+  </ul>
+</section>
+
+{{end}}
+{{end}}
+{{end}}

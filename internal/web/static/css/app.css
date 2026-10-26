@@ -1,0 +1,1151 @@
+/*
+  Palette tuned for reading, not for screenshots. It no longer mirrors the
+  engram TUI (Rosé Pine) — a deliberate divergence, so don't "resync" it on the
+  next engram bump.
+
+  The rules it follows, in case a colour ever needs adding:
+
+  · No pure black and no pure white. Maximum contrast is what makes long
+    sessions hurt; both themes sit a step inside the extremes.
+  · Dark is a desaturated blue-slate ink, light is warm paper. Neither is
+    neutral grey, which reads as dead, nor tinted enough to colour the text.
+  · Body text lands around 10:1 and secondary text stays above 4.5:1 — enough
+    to be effortless, not so much that it glares.
+  · Accents are muted, never neon: saturated hues on a dark background bloom
+    and force the eye to refocus constantly. In the light theme the same accents
+    are darkened instead, because a pastel on paper is unreadable.
+  · Every slot exists in both themes, so nothing in the stylesheet needs to know
+    which one is on. Translucent tints derive from these with color-mix rather
+    than being hardcoded — that used to leave dark-theme greens in the light
+    theme's heatmap.
+*/
+:root,
+[data-theme="dark"] {
+  --base:     #1a1d23;
+  --surface:  #22262e;
+  --overlay:  #39404b;
+  --text:     #d5d9e0;
+  --subtext:  #98a0ac;
+  --lavender: #a3b8e8;
+  --green:    #8fc7a9;
+  --peach:    #e0b088;
+  --red:      #e08b96;
+  --blue:     #7fb3d5;
+  --mauve:    #c3a6d8;
+  --teal:     #85c1c4;
+}
+
+[data-theme="light"] {
+  --base:     #f7f5f0;
+  --surface:  #fffdf8;
+  --overlay:  #d8d3c9;
+  --text:     #3c4149;
+  --subtext:  #646b75;
+  --lavender: #4f6bb0;
+  --green:    #35705a;
+  --peach:    #9a5f28;
+  --red:      #b04a5a;
+  --blue:     #2f6f95;
+  --mauve:    #7a5aa0;
+  --teal:     #35787c;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--base);
+  color: var(--text);
+  font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+a { color: var(--lavender); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Every button styled in this file sets its own cursor, which means any button
+   that lands outside those component selectors reads as dead text. Say it once
+   at the base instead, so the affordance is a property of buttons rather than
+   something each new screen has to remember. */
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+
+:root { --sidebar-w: 220px; }
+
+/* No width cap: every screen uses the window. This used to be capped at 1100px
+   with a per-page `wide` opt-out, but the pages that wanted the window turned
+   out to be nearly all of them — tables, control panels, side-by-side cards —
+   and the opt-out was being added one page at a time.
+   The cap only ever protected one thing, long-form prose, so that is where it
+   lives now: see `.markdown p` below. */
+main {
+  padding: 1.5rem 2rem;
+  margin-left: var(--sidebar-w);
+}
+
+h1, h2, h3 { color: var(--lavender); font-weight: 600; }
+h1 { margin-top: 0; }
+
+/* ── sidebar / footer ──────────────────────────────────────────────────── */
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-w);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem 0.75rem;
+  background: var(--surface);
+  border-right: 1px solid var(--overlay);
+  overflow-y: auto;
+  z-index: 20;
+}
+.sidebar .brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0;
+}
+.brand-logo {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--base);
+  border: 1px solid var(--overlay);
+}
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+}
+.sidebar nav a {
+  color: var(--subtext);
+  padding: 0.45rem 0.6rem;
+  border-radius: 4px;
+  font-size: 17px;
+}
+.sidebar nav a:hover { color: var(--text); background: var(--base); text-decoration: none; }
+.sidebar nav a.active { color: var(--lavender); background: var(--base); }
+
+/* Navigating is an htmx request, so a slow screen looks like a click that did
+   nothing. htmx marks the in-flight element with .htmx-request — on a boosted
+   link that is the anchor itself — which is enough to answer both "did it
+   register?" (the link lights up under the pointer) and "is it still working?"
+   (the cursor, anywhere on the page, via :has on the one element that knows).
+   Scoped to the sidebar on purpose: a lazily-loaded fragment somewhere in the
+   page is not a reason to tell the user the whole app is busy. */
+.sidebar nav a.htmx-request {
+  cursor: progress;
+  color: var(--lavender);
+  background: var(--base);
+}
+body:has(.sidebar nav a.htmx-request) { cursor: progress; }
+
+/* Project switcher + theme toggle, above the menu. The switcher takes the row
+   and the toggle sits at its end, so the control that scopes every screen is
+   the first thing under the logo. */
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--overlay);
+}
+.sidebar-head .project-switcher { flex: 1; min-width: 0; }
+
+.theme-toggle {
+  background: transparent;
+  color: var(--lavender);
+  border: 1px solid var(--overlay);
+  border-radius: 4px;
+  padding: 0.3rem 0.55rem;
+  font-size: 1rem;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  line-height: 1;
+}
+.theme-toggle:hover { color: var(--mauve); border-color: var(--lavender); text-decoration: none; }
+
+.project-switcher select {
+  background: var(--base);
+  border: 1px solid var(--overlay);
+  color: var(--text);
+  padding: 0.35rem 0.6rem;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
+  width: 100%;
+  cursor: pointer;
+}
+.project-switcher select:focus {
+  outline: none;
+  border-color: var(--lavender);
+}
+
+/* Mirrors main: it only ever had the cap so the two edges lined up. */
+footer {
+  padding: 1rem 2rem 2rem;
+  margin-left: var(--sidebar-w);
+  font-size: 12px;
+}
+
+@media (max-width: 800px) {
+  :root { --sidebar-w: 0px; }
+  .sidebar {
+    position: static;
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    bottom: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--overlay);
+  }
+  .sidebar .brand { padding: 0; }
+  .brand-logo { width: 40px; height: 40px; }
+  .sidebar nav { flex-direction: row; flex-wrap: wrap; gap: 0.25rem; }
+  .sidebar-head {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-left: auto;
+    order: 1; /* logo, then menu, then controls: the row reads left to right */
+  }
+  .project-switcher select { width: auto; min-width: 160px; }
+  main, footer { margin-left: 0; }
+  /* Last thing to give. On a phone the seven headers alone are wider than the
+     screen, so here they wrap too — a two-line header row beats a scrollbar. */
+  .proj-table th { white-space: normal; }
+}
+
+/* ── cards / sections ──────────────────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--overlay);
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+}
+.card.error { border-color: var(--red); }
+
+.content-block pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* ── forms ─────────────────────────────────────────────────────────────── */
+
+.search-form {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0 1.5rem;
+  flex-wrap: wrap;
+}
+.search-form input[type="search"],
+.search-form input[type="text"] {
+  flex: 1 1 200px;
+  background: var(--surface);
+  border: 1px solid var(--overlay);
+  color: var(--text);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+}
+.search-form input:focus {
+  outline: none;
+  border-color: var(--lavender);
+}
+/* ── primary button ────────────────────────────────────────────────────────
+   One rule for the four places that each carried their own copy: the search
+   bar, the conflict scanner, the verdict forms and the sync panels. They had
+   already drifted — two different paddings for no visible reason, and
+   :disabled defined in only two of them, so a disabled button in a verdict
+   form still looked clickable. */
+.search-form button,
+.scan-form button,
+.verdict-form button,
+.sync-actions button {
+  background: var(--lavender);
+  color: var(--base);
+  border: none;
+  padding: 0.55rem 1.25rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+}
+.search-form button:hover,
+.scan-form button:hover,
+.verdict-form button:hover,
+.sync-actions button:hover { background: var(--mauve); }
+.search-form button:disabled,
+.scan-form button:disabled,
+.verdict-form button:disabled,
+.sync-actions button:disabled { background: var(--overlay); color: var(--subtext); cursor: not-allowed; }
+/* These two sit below their own fields and need the gap. */
+.scan-form button,
+.verdict-form button { margin-top: 1rem; }
+
+.search-form select {
+  background: var(--surface);
+  border: 1px solid var(--overlay);
+  color: var(--text);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.search-form select:focus {
+  outline: none;
+  border-color: var(--lavender);
+}
+
+/* ── pagination + tabs ─────────────────────────────────────────────────── */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.5rem 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--overlay);
+}
+
+.status-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 1rem 0;
+  border-bottom: 1px solid var(--overlay);
+}
+.status-tabs .tab {
+  padding: 0.4rem 0.9rem;
+  color: var(--subtext);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.status-tabs .tab:hover { color: var(--text); text-decoration: none; }
+.status-tabs .tab.active {
+  color: var(--lavender);
+  border-bottom-color: var(--lavender);
+}
+
+/* Two cards side by side, stacking on their own when the window is too narrow
+   for both. Generic on purpose — the dashboard's top row needs asymmetric
+   tracks and keeps .dash-top, everything else with two equal cards uses this. */
+/* The margin lives on the row and the cards inside carry none — the same shape
+   .insights-grid already uses. That makes the band space itself exactly like a
+   single card does, so the gap above and below it matches the gap between any
+   two cards. With the margin on the children instead, the row had a top gap
+   and no bottom one, and whatever followed sat closer than a card should. */
+.card-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+  align-items: start;
+  margin: 1rem 0;
+}
+.card-row > .card { margin: 0; height: 100%; }
+
+/* Definition list for the relation verbs, inside a <details> so it costs one
+   line until someone asks. Term and meaning on one line each, two columns when
+   there is room. */
+.legend-box { margin: 0 0 1rem; }
+.legend-box summary { cursor: pointer; font-size: 12px; }
+.legend-box summary:hover { color: var(--text); }
+.legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 0.15rem 1.5rem;
+  margin: 0.5rem 0 0;
+  font-size: 12px;
+}
+.legend > div { display: flex; gap: 0.5rem; align-items: baseline; }
+.legend dt { min-width: 9.5rem; }
+.legend dd { margin: 0; }
+
+/* ── scan form ─────────────────────────────────────────────────────────── */
+
+/* The scanner reuses .verdict-row but not .verdict-form, so it never inherited
+   the flex rule below and its labels laid out as raw inline text: each one
+   wrapping wherever it happened to reach the edge, inputs landing under their
+   own captions. Give the row the same treatment, plus wrap + baseline so a
+   narrow window degrades to tidy lines instead of a ragged one. */
+.scan-form .verdict-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1.25rem;
+  margin-top: 0.5rem;
+}
+/* Each label is itself a flex box so its caption and its control stay on one
+   line together. No nowrap: the LLM checkbox carries a long "(not configured
+   — hover for how)" tail, and forcing it onto one line overflows the card
+   instead of wrapping inside it. */
+.scan-form .verdict-row label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+.scan-form input[type="number"] {
+  width: 90px;
+  background: var(--base);
+  border: 1px solid var(--overlay);
+  color: var(--text);
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+/* ── conflict diff + verdict form ──────────────────────────────────────── */
+
+.conflict-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.conflict-diff .card { margin: 0; }
+.conflict-diff h3 { margin-top: 0; font-size: 0.9rem; }
+.conflict-diff pre {
+  margin-top: 0.5rem;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+@media (max-width: 900px) {
+  .conflict-diff { grid-template-columns: 1fr; }
+}
+
+.verdict-form label {
+  display: block;
+  margin: 0.75rem 0 0.25rem;
+  color: var(--subtext);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.verdict-form .verdict-row {
+  display: flex;
+  gap: 1rem;
+}
+.verdict-form .verdict-row label { flex: 1; }
+/* input[type="text"] was missing here, so every URL field on the sync panels —
+   the repository to clone, the cloud server to talk to — rendered as an
+   unstyled browser default: narrow, wrong font, wrong colours, in the middle
+   of a styled form. */
+.verdict-form select,
+.verdict-form input[type="text"],
+.verdict-form input[type="number"],
+.verdict-form textarea {
+  width: 100%;
+  background: var(--base);
+  border: 1px solid var(--overlay);
+  color: var(--text);
+  padding: 0.45rem 0.75rem;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+}
+.verdict-form select:focus,
+.verdict-form input:focus,
+.verdict-form textarea:focus {
+  outline: none;
+  border-color: var(--lavender);
+}
+/* The empty state has one field and one button, and the field holds a git URL
+   you need to read back to check. Bigger than the rest of the forms on
+   purpose. Capped rather than 100%: main has no width limit any more, and a
+   50-character URL in a 1600px box is not easier to read, just emptier. */
+.repo-connect input[type="text"] {
+  max-width: 56ch;
+  font-size: 16px;
+  padding: 0.6rem 0.85rem;
+}
+
+
+.badge.badge-cloud { background: var(--blue); text-transform: none; letter-spacing: 0; }
+
+.badge.status-pending  { background: var(--peach); color: var(--base); }
+.badge.status-judged   { background: var(--green); color: var(--base); }
+.badge.status-orphaned { background: var(--overlay); color: var(--text); }
+.badge.status-ignored  { background: var(--overlay); color: var(--text); }
+
+/* ── stats grid ────────────────────────────────────────────────────────── */
+
+/* Dashboard top row: counters beside the activity heatmap. The heatmap needs
+   ~26×14px plus padding, so it gets the wider track and the counters fold into
+   2×2 in the narrow one. Below 900px there is no room for both, so they stack
+   again — which is also what the heatmap's own overflow-x expects. */
+/* Margin on the row, none on the cards — see .card-row for why. */
+.dash-top {
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) minmax(400px, 1.6fr);
+  gap: 1rem;
+  align-items: start;
+  margin: 1rem 0;
+}
+.dash-top > .card { margin: 0; height: 100%; }
+@media (max-width: 900px) {
+  .dash-top { grid-template-columns: 1fr; }
+  .dash-top > .card { height: auto; }
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+}
+.stats-grid > div {
+  display: flex;
+  flex-direction: column;
+}
+.stats-grid > div span { font-size: 12px; }
+.stats-grid > div strong {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+/* ── sparklines ────────────────────────────────────────────────────────── */
+
+.spark { display: block; margin-top: 0.25rem; height: 22px; }
+.spark-svg { width: 100%; height: 100%; }
+.spark-tip { font-size: 11px; }
+
+/* ── lists ─────────────────────────────────────────────────────────────── */
+
+.list { list-style: none; padding: 0; margin: 0; }
+.list-row {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--overlay);
+}
+.list-row:hover { background: var(--surface); }
+.list-row.focused {
+  background: var(--surface);
+  outline: 2px solid var(--lavender);
+  outline-offset: -2px;
+}
+.list-row a {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  color: var(--text);
+}
+.list-row a:hover { text-decoration: none; }
+.list-row .row-title { font-weight: 600; flex: 1 1 auto; }
+.list-row .meta-id { color: var(--peach); font-size: 12px; }
+.list-row .meta-time { font-size: 12px; }
+.list-row.small { padding: 0.5rem 1rem; }
+
+.preview {
+  margin-top: 0.5rem;
+  color: var(--subtext);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.preview.markdown { white-space: normal; }
+.preview.markdown p { margin: 0.15rem 0; }
+.preview.markdown h1, .preview.markdown h2, .preview.markdown h3 {
+  font-size: 0.95rem;
+  margin: 0.25rem 0;
+}
+.preview.markdown ul, .preview.markdown ol { margin: 0.15rem 0; padding-left: 1.2rem; }
+.preview.markdown pre { padding: 0.4rem 0.6rem; max-height: 80px; overflow: hidden; }
+.preview.markdown code { font-size: 11px; }
+
+/* ── badges ────────────────────────────────────────────────────────────── */
+
+.badge {
+  background: var(--blue);
+  /* Dark text on the accent, never light-on-light: the accents are mid-tone in
+     both themes, so a badge that borrowed --text was the one place in the app
+     you had to squint. Badges backed by --overlay flip it back below. */
+  color: var(--base);
+  padding: 0.1rem 0.5rem;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* ── metadata grid (detail screens) ────────────────────────────────────── */
+
+.metadata {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.5rem 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--overlay);
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+}
+.metadata > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.metadata span:first-child { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.metadata code { color: var(--peach); font-size: 12px; }
+
+
+/* ── timeline ──────────────────────────────────────────────────────────── */
+
+.timeline {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.timeline-side h3, .timeline-focus h3 { margin-top: 0; font-size: 0.9rem; }
+.timeline-focus { border-color: var(--lavender); }
+.timeline-focus pre { white-space: pre-wrap; font-family: inherit; font-size: 12px; }
+
+@media (max-width: 900px) {
+  .timeline { grid-template-columns: 1fr; }
+}
+
+/* ── utilities ─────────────────────────────────────────────────────────── */
+
+/* ── session timeline strip ────────────────────────────────────────────── */
+
+.timeline-strip {
+  list-style: none;
+  margin: 1rem 0;
+  padding: 0;
+  position: relative;
+}
+.timeline-strip::before {
+  content: "";
+  position: absolute;
+  left: 110px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--overlay);
+}
+.t-entry {
+  display: grid;
+  grid-template-columns: 100px 20px 1fr;
+  align-items: start;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  position: relative;
+}
+.t-time {
+  color: var(--subtext);
+  font-size: 11px;
+  text-align: right;
+  padding-top: 0.15rem;
+}
+.t-marker {
+  color: var(--lavender);
+  text-align: center;
+  font-size: 1rem;
+  line-height: 1;
+  padding-top: 0.1rem;
+  z-index: 1;
+  background: var(--base);
+}
+.t-entry.t-prompt .t-marker { color: var(--peach); }
+.t-body { min-width: 0; }
+.t-body .preview { margin-top: 0.25rem; }
+.badge.badge-prompt { background: var(--peach); color: var(--base); }
+@media (max-width: 700px) {
+  .timeline-strip::before { left: 18px; }
+  .t-entry { grid-template-columns: 14px 1fr; grid-template-rows: auto auto; }
+  .t-time { grid-column: 2; text-align: left; padding-top: 0; }
+  .t-marker { grid-column: 1; grid-row: 1 / 3; align-self: start; padding-top: 0.4rem; }
+  .t-body { grid-column: 2; }
+}
+
+/* ── save suggest panel ────────────────────────────────────────────────── */
+
+.save-suggest:empty { display: none; }
+.save-suggest h4 { margin: 0.25rem 0; font-size: 0.85rem; color: var(--lavender); }
+.topic-suggest { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.25rem; }
+.topic-suggest .action-btn { font-size: 11px; }
+
+/* ── bulk action bar ───────────────────────────────────────────────────── */
+
+/* One toolbar row: bulk controls left, exports right. They used to be two
+   stacked blocks costing a screenful of height above the list. The dimming
+   applies to the bulk half only — the export links are always live, so greying
+   them out while nothing is selected would be a lie. */
+.bulk-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+  background: var(--surface);
+  border: 1px solid var(--overlay);
+  border-radius: 6px;
+}
+.bulk-bar.active { border-color: var(--lavender); }
+.bulk-controls,
+.bulk-exports {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.bulk-exports { margin-left: auto; }
+.bulk-controls {
+  opacity: 0.5;
+  transition: opacity 120ms ease;
+}
+.bulk-bar.active .bulk-controls { opacity: 1; }
+.bulk-bar select,
+.bulk-bar input[type="text"] {
+  background: var(--base);
+  border: 1px solid var(--overlay);
+  color: var(--text);
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.bulk-bar input[type="text"] { min-width: 200px; }
+
+.bulk-check {
+  margin-right: 0.5rem;
+  cursor: pointer;
+  accent-color: var(--lavender);
+}
+.list-row:has(.bulk-check:checked) { background: color-mix(in srgb, var(--lavender) 12%, transparent); }
+
+/* ── markdown ──────────────────────────────────────────────────────────── */
+
+/* The one thing the old 1100px cap on <main> was actually protecting. A
+   paragraph running the full width of a wide monitor is ~350 characters a
+   line, and you lose your place coming back to the left edge. Capped on the
+   text itself rather than the container, so code blocks, tables and headings
+   inside an observation still get the whole window. */
+.markdown p, .markdown li { max-width: 78ch; }
+
+.markdown { line-height: 1.55; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4 { color: var(--lavender); margin-top: 1.5rem; margin-bottom: 0.5rem; }
+.markdown h1 { font-size: 1.4rem; }
+.markdown h2 { font-size: 1.2rem; }
+.markdown h3 { font-size: 1.05rem; }
+.markdown p { margin: 0.5rem 0; }
+.markdown ul, .markdown ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+.markdown li { margin: 0.15rem 0; }
+.markdown code {
+  background: var(--base);
+  border: 1px solid var(--overlay);
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  color: var(--peach);
+  font-size: 12px;
+}
+.markdown pre {
+  background: var(--base);
+  border: 1px solid var(--overlay);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+}
+.markdown pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text);
+}
+.markdown blockquote {
+  border-left: 3px solid var(--lavender);
+  margin: 0.75rem 0;
+  padding: 0.25rem 0.75rem;
+  color: var(--subtext);
+}
+.markdown table {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+}
+.markdown th, .markdown td {
+  border: 1px solid var(--overlay);
+  padding: 0.35rem 0.6rem;
+}
+.markdown th { background: var(--surface); color: var(--lavender); }
+.markdown a { color: var(--lavender); }
+.markdown hr { border: none; border-top: 1px solid var(--overlay); margin: 1rem 0; }
+.markdown strong { color: var(--text); }
+.markdown em { color: var(--mauve); }
+
+/* ── heatmap ───────────────────────────────────────────────────────────── */
+
+.hm-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 12px);
+  gap: 2px;
+  overflow-x: auto;
+  padding: 0.25rem 0;
+}
+.hm-col { display: contents; }
+.hm-cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  display: inline-block;
+  background: var(--surface);
+  border: 1px solid var(--overlay);
+}
+.hm-cell.hm-empty { visibility: hidden; }
+.hm-cell.hm-l0 { background: var(--surface); }
+.hm-cell.hm-l1 { background: color-mix(in srgb, var(--green) 30%, var(--surface)); border-color: transparent; }
+.hm-cell.hm-l2 { background: color-mix(in srgb, var(--green) 55%, var(--surface)); border-color: transparent; }
+.hm-cell.hm-l3 { background: color-mix(in srgb, var(--green) 80%, var(--surface)); border-color: transparent; }
+.hm-cell.hm-l4 { background: var(--green); border-color: var(--green); }
+
+.heatmap-legend {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 0.5rem;
+  font-size: 11px;
+}
+.heatmap-legend .hm-cell { width: 10px; height: 10px; }
+
+/* ── projects table ────────────────────────────────────────────────────── */
+
+/* Lets a wide table keep its columns instead of wrapping them, and confines the
+   overflow to the table so the page itself never scrolls sideways. */
+.table-scroll { overflow-x: auto; }
+
+.proj-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+/* Project names are long and hyphenated. Given room the name stays on one
+   line; when there is none it breaks rather than push the table past the
+   window. `anywhere` as well as the hyphens, because a name can be one
+   unbroken word wider than the column it is in. */
+.proj-table td:first-child { overflow-wrap: anywhere; }
+.proj-table th, .proj-table td {
+  border-bottom: 1px solid var(--overlay);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-size: 13px;
+}
+.proj-table th {
+  color: var(--lavender);
+  font-weight: 600;
+  background: var(--surface);
+  /* Headers set the column widths; letting "Last activity" or "Observations"
+     wrap to two lines makes the whole header row twice as tall for nothing. */
+  white-space: nowrap;
+}
+.proj-table tbody tr:hover { background: var(--surface); }
+.proj-table tbody tr.proj-active { background: var(--surface); }
+.proj-table tbody tr.proj-active td:first-child { border-left: 2px solid var(--lavender); }
+.proj-table td:nth-child(n+2):nth-child(-n+6) { text-align: right; font-variant-numeric: tabular-nums; }
+/* Five buttons are the widest thing in the row and the only part with slack,
+   so they are what gives: they wrap onto a second line instead of pushing the
+   table into a horizontal scrollbar. The vertical margin is what stops wrapped
+   rows of buttons from touching — inline-block wrapping has no row gap. */
+.proj-table td:last-child { white-space: normal; }
+.proj-table td:last-child .action-btn { display: inline-block; margin: 0.1rem 0; }
+/* "Switch" and "Active" occupy the same box so every other button in the row
+   starts at the same x across projects. In rem, not ch: .action-btn is 12px
+   while ch resolves against it, which made the first attempt (9ch ≈ 65px)
+   narrower than the label itself and therefore a no-op. */
+.proj-switch { display: inline-block; min-width: 5.5rem; text-align: center; }
+
+/* The shared-repo table borrows .proj-table, but only its first two columns
+   hold numbers — the rest is names, a timestamp and an action, so the
+   right-alignment is undone from the third column on. The contributor cell is
+   capped: a team repo can list dozens of people, and one column that grows
+   without limit pushes the Pull button off screen. */
+.share-table td:nth-child(n+4) { text-align: left; }
+.share-table td:nth-child(4) { max-width: 24ch; }
+
+/* ── memory health ─────────────────────────────────────────────────────── */
+
+.health-card { padding: 1rem 1.25rem; }
+.health-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.health-header h3 { margin: 0; }
+.health-score strong {
+  font-size: 2rem;
+  font-weight: 700;
+}
+.health-score span { color: var(--subtext); font-size: 0.9rem; }
+.health-good strong { color: var(--green); }
+.health-warn strong { color: var(--peach); }
+.health-bad strong { color: var(--red); }
+
+.health-factors {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+}
+.health-factors li { margin-bottom: 0.6rem; }
+.health-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  font-size: 12px;
+}
+.health-label { color: var(--text); flex: 0 0 180px; }
+.health-row .text-subtext { flex: 1; }
+.health-pct { color: var(--lavender); font-weight: 600; }
+.health-bar {
+  height: 4px;
+  background: var(--surface);
+  border-radius: 2px;
+  margin-top: 0.2rem;
+  overflow: hidden;
+}
+.health-bar span {
+  display: block;
+  height: 100%;
+  background: var(--lavender);
+}
+
+/* ── insights grid ─────────────────────────────────────────────────────── */
+
+.insights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.insights-grid .insight-card { margin: 0; }
+.insights-grid .insight-card h3 { margin-top: 0; font-size: 1rem; }
+.insights-grid .insight-card h4 { margin: 0.75rem 0 0.25rem; font-size: 0.8rem; }
+
+/* ── graph ─────────────────────────────────────────────────────────────── */
+
+.graph-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 0.75rem 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--overlay);
+  border-radius: 6px;
+}
+.graph-toolbar label { display: flex; align-items: center; gap: 0.5rem; font-size: 12px; }
+.graph-toolbar select,
+.graph-toolbar input[type="search"] {
+  background: var(--base);
+  border: 1px solid var(--overlay);
+  color: var(--text);
+  padding: 0.3rem 0.55rem;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.graph-toolbar input[type="search"] { min-width: 220px; }
+
+.graph-canvas {
+  width: 100%;
+  height: 70vh;
+  min-height: 480px;
+  background: var(--base);
+  border: 1px solid var(--overlay);
+  border-radius: 6px;
+  position: relative;
+}
+
+.graph-side {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  width: 320px;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  z-index: 10;
+}
+.graph-side h3, .graph-side h4 { margin-top: 0.5rem; }
+.graph-side .list-row.small { padding: 0.35rem 0; border-bottom: 1px solid var(--overlay); }
+@media (max-width: 900px) {
+  .graph-side { position: static; width: 100%; }
+}
+
+/* ── kbd / help panel ──────────────────────────────────────────────────── */
+
+kbd {
+  background: var(--surface);
+  border: 1px solid var(--overlay);
+  border-radius: 3px;
+  padding: 0 0.35rem;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--peach);
+}
+
+#kbd-help {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+#kbd-help .kbd-help-card {
+  background: var(--surface);
+  border: 1px solid var(--lavender);
+  border-radius: 8px;
+  padding: 1.5rem 2rem;
+  min-width: 320px;
+}
+#kbd-help table { border-collapse: collapse; margin-top: 0.5rem; }
+#kbd-help td { padding: 0.25rem 0.75rem 0.25rem 0; }
+
+/* ── diff ──────────────────────────────────────────────────────────────── */
+
+pre.diff { white-space: pre-wrap; font-family: inherit; font-size: 12px; line-height: 1.5; }
+.diff-add { display: block; background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+.diff-del { display: block; background: color-mix(in srgb, var(--red) 18%, transparent); color: var(--red); }
+.diff-ctx { display: block; color: var(--subtext); }
+
+/* ── action buttons (clipboard, export) ────────────────────────────────── */
+
+.action-btn {
+  background: var(--surface);
+  border: 1px solid var(--overlay);
+  color: var(--text);
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  text-decoration: none;
+  display: inline-block;
+}
+.action-btn:hover {
+  border-color: var(--lavender);
+  color: var(--lavender);
+  text-decoration: none;
+}
+.actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 1rem 0; }
+
+.text-lavender { color: var(--lavender); }
+.text-subtext { color: var(--subtext); }
+.text-green { color: var(--green); }
+.text-red { color: var(--red); }
+.text-peach { color: var(--peach); }
+
+/* ── cloud sync ────────────────────────────────────────────────────────── */
+
+.sync-setup-row {
+  display: grid;
+  grid-template-columns: 5fr 6fr;
+  gap: 1rem;
+  align-items: start;
+  margin: 1rem 0;
+}
+.sync-setup-row > .card { margin: 0; height: 100%; }
+.sync-setup-box { display: flex; flex-direction: column; }
+.sync-setup-part h3 { margin-top: 0; }
+.sync-setup-part code { word-break: break-all; }
+@media (max-width: 1000px) {
+  .sync-setup-row { grid-template-columns: 1fr; }
+}
+
+.sync-actions { align-items: center; }
+.sync-actions form { margin: 0; }
+/* The quiet variant: disconnect, clear, and the other reversible actions. */
+.sync-actions button.secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--overlay);
+}
+.sync-actions button.secondary:hover { border-color: var(--lavender); color: var(--lavender); background: var(--surface); }
+.sync-actions button:disabled { background: var(--overlay); color: var(--subtext); cursor: not-allowed; }
+
+/* ── in-flight feedback ───────────────────────────────────────────────────
+   Publishing and pulling shell out to git and engram over the network, so a
+   button can sit there for seconds with nothing to show for it. The layout
+   sets hx-boost, which means every form already submits through htmx, and
+   htmx marks the in-flight element with .htmx-request — so a spinner needs
+   no markup, no JavaScript, and covers every submit button in the app rather
+   than one screen. Both selectors are here because htmx flags the form on a
+   boosted submit and the button when the button itself carries hx-*. */
+form.htmx-request button[type="submit"],
+button[type="submit"].htmx-request {
+  cursor: progress;
+  opacity: 0.75;
+}
+form.htmx-request button[type="submit"]::after,
+button[type="submit"].htmx-request::after {
+  content: "";
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-left: 0.5em;
+  vertical-align: -0.08em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: engram-spin 0.6s linear infinite;
+}
+@keyframes engram-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  form.htmx-request button[type="submit"]::after,
+  button[type="submit"].htmx-request::after { animation: none; }
+}
+
+.sync-result pre {
+  margin: 0.75rem 0 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--base);
+  padding: 0.6rem 0.8rem;
+  border-radius: 4px;
+}
+.sync-result.ok { border-color: var(--green); }
+
+.pull-selective .verdict-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.4rem 0;
+}
+.pull-selective select { margin-top: 0.5rem; }
+
+.badge.sync-phase-healthy { background: var(--green); color: var(--base); }
+.badge.sync-phase-running { background: var(--blue); color: var(--base); }
+.badge.sync-phase-idle    { background: var(--overlay); color: var(--text); }
+.badge.sync-phase-degraded { background: var(--red); color: var(--base); }

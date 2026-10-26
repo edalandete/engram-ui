@@ -1,0 +1,24 @@
+{{define "content"}}
+<h1>Export to Markdown vault</h1>
+<p class="text-subtext">
+  Writes one Markdown file per observation, with YAML frontmatter, into a directory on the local filesystem.
+  Compatible with Obsidian.
+</p>
+
+<section class="card verdict-form">
+  <form action="/export-vault" method="post">
+    <label>Vault directory (absolute path)
+      <input type="text" name="vault" required placeholder="C:\Users\you\Documents\my-vault">
+    </label>
+    <div class="verdict-row">
+      <label>Project (blank = all)
+        <input type="text" name="project" value="{{.DefaultProject}}">
+      </label>
+      <label>Limit
+        <input type="number" name="limit" value="1000" min="1" max="10000">
+      </label>
+    </div>
+    <button type="submit">Export</button>
+  </form>
+</section>
+{{end}}

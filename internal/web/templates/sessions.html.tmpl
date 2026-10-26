@@ -1,0 +1,25 @@
+{{define "content"}}
+<h1>Sessions</h1>
+<p class="text-subtext">{{len .Sessions}} shown</p>
+
+{{if .Sessions}}
+<ul class="list">
+  {{range .Sessions}}
+  <li class="list-row">
+    <a href="/sessions/{{.ID}}">
+      <span class="row-title">{{.Project}}</span>
+      <span class="text-subtext">{{.ID}}</span>
+      <span class="text-subtext meta-time">{{.StartedAt}}</span>
+      {{if .ObservationCount}}<span class="text-green">{{.ObservationCount}} obs</span>{{end}}
+      {{if .EndedAt}}<span class="text-subtext">→ {{.EndedAt}}</span>{{end}}
+    </a>
+    {{if .Summary}}<div class="preview">{{snippet .Summary 240}}</div>{{end}}
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="text-subtext">No sessions.</p>
+{{end}}
+
+{{template "pagination" .}}
+{{end}}

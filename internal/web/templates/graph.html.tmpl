@@ -1,0 +1,38 @@
+{{define "content"}}
+<h1>Graph</h1>
+<p class="text-subtext">
+  Force-directed view of the relations between observations.
+  Nodes = observations · edges = relations (color = relation kind, dashed = pending).
+  {{if .CurrentProject}}Project: <code>{{.CurrentProject}}</code>{{else}}<strong>No project filter — showing all.</strong>{{end}}
+</p>
+
+<section class="graph-toolbar">
+  <span id="graph-stats" class="text-subtext">loading…</span>
+  <label class="text-subtext">Family
+    <select id="family-select"><option value="">all</option></select>
+  </label>
+  <label class="text-subtext">Layout
+    <select id="layout-select">
+      <option value="cose" selected>cose (force)</option>
+      <option value="concentric">concentric</option>
+      <option value="breadthfirst">breadth-first</option>
+      <option value="grid">grid</option>
+      <option value="circle">circle</option>
+    </select>
+  </label>
+  <label class="text-subtext"><input type="checkbox" id="hide-orphans"> hide isolated</label>
+  <input id="graph-search" aria-label="Filter graph nodes" type="search" placeholder="filter node by title…">
+  <button class="action-btn" id="graph-fit">⤢ Fit</button>
+  <button class="action-btn" id="graph-reset">↻ Reset</button>
+</section>
+
+<div id="cy" class="graph-canvas"></div>
+
+<aside id="graph-side" class="graph-side card">
+  <h3 class="text-subtext">Selection</h3>
+  <p class="text-subtext">Click a node or edge.</p>
+</aside>
+
+<script src="/static/js/cytoscape.min.js" defer></script>
+<script src="/static/js/graph.js" defer></script>
+{{end}}

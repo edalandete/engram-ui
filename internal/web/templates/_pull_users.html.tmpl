@@ -1,0 +1,23 @@
+{{define "pull-users"}}
+<div id="pull-users">
+  {{if .PullUsersErr}}<p class="text-peach">Contributor list unavailable: {{.PullUsersErr}}</p>{{end}}
+  <label class="verdict-row">
+    <input type="radio" name="mode" value="user"{{if not .PullUsers}} disabled{{end}}> Pull by contributor:
+  </label>
+  <select name="created_by"{{if not .PullUsers}} disabled{{end}}>
+    {{if .PullUsers}}
+      {{range .PullUsers}}
+      <option value="{{.User}}">{{.User}} — {{.Obs}} observation(s) in {{.Chunks}} commit(s)</option>
+      {{end}}
+    {{else}}
+      <option value="">(no contributors found{{if not .CloudServer}} — set a cloud server on this page first{{end}})</option>
+    {{end}}
+  </select>
+  {{if .PullUsers}}
+  {{/* Was the only Spanish text in the app, and it arrived by HTMX into the
+       middle of an English panel. Vocabulary matched to the rest of the UI:
+       chunk → commit, memory → observation. */}}
+  <p class="text-subtext">{{.CloudTotalObs}} distinct observation(s) in the cloud. Each one is credited to whoever pushed it first, so the contributor counts add up rather than double-count. Pulling one contributor fetches their whole commit, which may overlap with someone else's.</p>
+  {{end}}
+</div>
+{{end}}

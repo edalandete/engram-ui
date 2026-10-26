@@ -1,0 +1,28 @@
+{{define "content"}}
+<h1>Prompts</h1>
+
+<form class="search-form" action="/prompts" method="get">
+  <input type="search" name="q" aria-label="Search prompts" value="{{.Query}}" placeholder="FTS5 search prompts…">
+  <button type="submit">Search</button>
+</form>
+
+<p class="text-subtext">
+  {{len .Prompts}} shown{{if .CurrentProject}} · project: <code>{{.CurrentProject}}</code>{{end}}
+</p>
+
+{{if .Prompts}}
+<ul class="list">
+  {{range .Prompts}}
+  <li class="list-row">
+    <span class="meta-id">#{{.ID}}</span>
+    <span class="text-subtext">{{.Project}}</span>
+    <span class="text-subtext meta-time">{{.CreatedAt}}</span>
+    {{if .SessionID}}<span class="text-subtext">→ <a href="/sessions/{{.SessionID}}">{{.SessionID}}</a></span>{{end}}
+    <div class="preview">{{snippet .Content 600}}</div>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="text-subtext">No prompts.</p>
+{{end}}
+{{end}}

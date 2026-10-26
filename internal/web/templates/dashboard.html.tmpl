@@ -1,0 +1,172 @@
+{{define "content"}}
+<h1>Dashboard</h1>
+
+<form class="search-form" action="/observations" method="get">
+  <input type="search" name="q" aria-label="Search observations" placeholder="Search observations…" autofocus>
+  <button type="submit">Search</button>
+</form>
+
+{{/* Counters and activity side by side: both are a glance, neither deserves a
+     full row. Collapses back to one column when the window is too narrow for
+     26 weeks of heatmap next to them. */}}
+<div class="dash-top">
+  {{if .Stats}}
+  <section class="card stats-grid">
+    <div>
+      <span class="text-subtext">Sessions</span>
+      <a href="/sessions"><strong class="text-green">{{.Stats.Sessions}}</strong></a>
+    </div>
+    <div>
+      <span class="text-subtext">Observations</span>
+      {{/* The per-project count comes from a scan window, so a project bigger
+           than the window reports the window. Say "at least" rather than
+           print a wrong number that looks exact. */}}
+      <strong class="text-green" {{if .ObsCountCapped}}title="At least this many — the dashboard counts a scan window, and this project fills it"{{end}}>{{if .ObsCountCapped}}{{.ObsCount}}+{{else}}{{.ObsCount}}{{end}}</strong>
+      <span class="spark text-green" data-sparkline="obs"></span>
+      <span class="text-subtext spark-tip" data-spark-tip></span>
+    </div>
+    <div><span class="text-subtext">Prompts</span><a href="/prompts"><strong class="text-green">{{.Stats.Prompts}}</strong></a></div>
+    <div><span class="text-subtext">Projects</span><strong class="text-green">{{len .Stats.Projects}}</strong></div>
+  </section>
+  {{end}}
+
+  <section id="heatmap-section" class="card" data-project="{{.CurrentProject}}">
+    <h3>Activity (last 26 weeks)</h3>
+    <div id="heatmap"></div>
+    <p class="text-subtext heatmap-legend">
+      <span>Less</span>
+      <span class="hm-cell hm-l0"></span>
+      <span class="hm-cell hm-l1"></span>
+      <span class="hm-cell hm-l2"></span>
+      <span class="hm-cell hm-l3"></span>
+      <span class="hm-cell hm-l4"></span>
+      <span>More</span>
+    </p>
+  </section>
+</div>
+
+{{with .Insights}}
+{{if .HealthFactors}}
+<section class="card health-card">
+  <div class="health-header">
+    <h3>Engram health</h3>
+    <div class="health-score health-{{if ge .HealthScore 80}}good{{else if ge .HealthScore 50}}warn{{else}}bad{{end}}">
+      <strong>{{.HealthScore}}</strong><span>/100</span>
+    </div>
+  </div>
+  <ul class="health-factors">
+    {{range .HealthFactors}}
+    <li>
+      <div class="health-row">
+        <span class="health-label">{{.Label}}</span>
+        <span class="text-subtext">{{.Detail}}</span>
+        <span class="health-pct">{{.Score}}</span>
+      </div>
+      <div class="health-bar"><span style="width:{{.Score}}%"></span></div>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
+<section class="insights-grid">
+  {{if .TopRevisedTopics}}
+  <div class="card insight-card">
+    <h3>Most revised topics</h3>
+    <ul class="list">
+      {{range .TopRevisedTopics}}
+      <li class="list-row small">
+        <a href="/topics/{{.Key}}">
+          <span class="text-green">{{.RevisionCount}}×</span>
+          <code class="text-peach">{{.Key}}</code>
+          <span class="row-title">{{.Title}}</span>
+        </a>
+      </li>
+      {{end}}
+    </ul>
+    <p class="text-subtext">High revisions = areas that change often.</p>
+  </div>
+  {{end}}
+
+  {{if gt .PendingTotal 0}}
+  <div class="card insight-card">
+    <h3>Pending conflicts</h3>
+    <p><a href="/conflicts?status=pending"><strong class="text-peach">{{.PendingTotal}}</strong> pending</a></p>
+    {{if .ConflictsByKind}}
+    <h4 class="text-subtext">By kind</h4>
+    <ul class="list">
+      {{range $k, $v := .ConflictsByKind}}
+      <li class="list-row small">
+        <a href="/conflicts?status=judged&relation={{$k}}">
+          <span class="badge">{{$k}}</span><span class="text-green">{{$v}}</span>
+        </a>
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+  </div>
+  {{end}}
+
+  {{if gt .OrphanCount 0}}
+  <div class="card insight-card">
+    <h3>Orphan observations</h3>
+    <p><strong class="text-red">{{.OrphanCount}}</strong> obs without a project (in last {{.WindowScanned}}).</p>
+    <ul class="list">
+      {{range .OrphanSample}}
+      <li class="list-row small">
+        <a href="/observations/{{.ID}}">
+          <span class="meta-id">#{{.ID}}</span>
+          <span class="badge">{{.Type}}</span>
+          <span class="row-title">{{.Title}}</span>
+        </a>
+      </li>
+      {{end}}
+    </ul>
+  </div>
+  {{end}}
+
+  {{if gt .NoTopicKeyCount 0}}
+  <div class="card insight-card">
+    <h3>Without topic-key</h3>
+    <p><strong>{{.NoTopicKeyCount}}</strong> obs missing topic_key (last {{.WindowScanned}}).</p>
+    <ul class="list">
+      {{range .NoTopicKeySample}}
+      <li class="list-row small">
+        <a href="/observations/{{.ID}}">
+          <span class="meta-id">#{{.ID}}</span>
+          <span class="badge">{{.Type}}</span>
+          <span class="row-title">{{.Title}}</span>
+        </a>
+      </li>
+      {{end}}
+    </ul>
+    <p class="text-subtext">Topic-keys enable revisions + dedup.</p>
+  </div>
+  {{end}}
+
+  {{if .StaleSessions}}
+  <div class="card insight-card">
+    <h3>Sessions without summary</h3>
+    <ul class="list">
+      {{range .StaleSessions}}
+      <li class="list-row small">
+        <a href="/sessions/{{.ID}}">
+          <span class="text-subtext">{{.Project}}</span>
+          <span class="row-title">{{.ID}}</span>
+          <span class="text-subtext meta-time">{{.StartedAt}}</span>
+        </a>
+      </li>
+      {{end}}
+    </ul>
+  </div>
+  {{end}}
+</section>
+{{end}}
+
+{{/* No project list and no recent-observations feed here: both have their own
+     screen in the sidebar, and repeating them pushed the things you can only
+     see on this page — health, conflicts, orphans — below the fold. */}}
+
+<script src="/static/js/heatmap.js" defer></script>
+<script src="/static/js/sparklines.js" defer></script>
+{{end}}
