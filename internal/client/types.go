@@ -61,9 +61,7 @@ func (q SearchQuery) values() url.Values {
 	if q.Query != "" {
 		v.Set("q", q.Query)
 	}
-	if q.Project != "" {
-		v.Set("project", q.Project)
-	}
+	scopeProject(v, q.Project)
 	if q.Scope != "" {
 		v.Set("scope", q.Scope)
 	}
