@@ -841,7 +841,7 @@ func (b *Bridge) publish(ctx context.Context, project string) PushResult {
 	}
 
 	exported := filepath.Join(workDir, syncDirName, chunksDirName)
-	added, err := newChunks(workDir, staged)
+	added, version, err := newChunks(workDir, staged)
 	if err != nil {
 		res.Stage, res.Err = "export", err
 		return res
@@ -849,7 +849,7 @@ func (b *Bridge) publish(ctx context.Context, project string) PushResult {
 	if screened && len(added) > 0 {
 		findings, err := screenChunks(exported, project, added, patterns)
 		if err == nil && len(findings) > 0 {
-			err = b.quarantine(exported, dirName, added)
+			err = b.quarantine(exported, dirName, version, added)
 		}
 		if err != nil {
 			res.Stage, res.Err = "screen", err
@@ -861,7 +861,7 @@ func (b *Bridge) publish(ctx context.Context, project string) PushResult {
 			return res
 		}
 	}
-	if err := b.copyIn(exported, dirName, added); err != nil {
+	if err := b.copyIn(exported, dirName, version, added); err != nil {
 		res.Stage, res.Err = "export", err
 		return res
 	}
@@ -932,7 +932,7 @@ func (b *Bridge) PublishQuarantined(ctx context.Context, project string) PushRes
 		}
 	}
 	b.ensureGitAttributes()
-	if err := b.copyIn(filepath.Join(held, chunksDirName), dirName, m.Chunks); err != nil {
+	if err := b.copyIn(filepath.Join(held, chunksDirName), dirName, m.Version, m.Chunks); err != nil {
 		res.Stage, res.Err = "export", err
 		return res
 	}
@@ -1032,21 +1032,22 @@ func (b *Bridge) stagedView(dirName string) []ChunkEntry {
 // follows, and for the same reason: an entry dropped from the manifest is a
 // chunk nobody will ever import again.
 func (b *Bridge) adoptChunks(workDir, dirName string, staged []ChunkEntry) ([]ChunkEntry, error) {
-	added, err := newChunks(workDir, staged)
+	added, version, err := newChunks(workDir, staged)
 	if err != nil {
 		return nil, err
 	}
-	if err := b.copyIn(filepath.Join(workDir, syncDirName, chunksDirName), dirName, added); err != nil {
+	if err := b.copyIn(filepath.Join(workDir, syncDirName, chunksDirName), dirName, version, added); err != nil {
 		return nil, err
 	}
 	return added, nil
 }
 
-// newChunks returns what the export in workDir produced beyond the staged view.
-func newChunks(workDir string, staged []ChunkEntry) ([]ChunkEntry, error) {
+// newChunks returns what the export in workDir produced beyond the staged view,
+// and the manifest version engram wrote for it.
+func newChunks(workDir string, staged []ChunkEntry) ([]ChunkEntry, int, error) {
 	produced, err := readManifest(filepath.Join(workDir, syncDirName, manifestName))
 	if err != nil {
-		return nil, fmt.Errorf("read exported manifest: %w", err)
+		return nil, 0, fmt.Errorf("read exported manifest: %w", err)
 	}
 	was := make(map[string]bool, len(staged))
 	for _, e := range staged {
@@ -1058,12 +1059,12 @@ func newChunks(workDir string, staged []ChunkEntry) ([]ChunkEntry, error) {
 			added = append(added, e)
 		}
 	}
-	return added, nil
+	return added, produced.Version, nil
 }
 
 // copyIn copies chunks from srcChunks into the project and unions their entries
 // into its manifest.
-func (b *Bridge) copyIn(srcChunks, dirName string, added []ChunkEntry) error {
+func (b *Bridge) copyIn(srcChunks, dirName string, version int, added []ChunkEntry) error {
 	if len(added) == 0 {
 		return nil
 	}
@@ -1077,7 +1078,9 @@ func (b *Bridge) copyIn(srcChunks, dirName string, added []ChunkEntry) error {
 	if err != nil {
 		current = []byte(`{"version":1,"chunks":[]}`) // first publish of this project
 	}
-	mine, err := marshalManifest(Manifest{Version: 1, Chunks: added})
+	// Keep engram's version: it writes 2 once the project's sessions carry
+	// ownership modes (see UnionManifests).
+	mine, err := marshalManifest(Manifest{Version: version, Chunks: added})
 	if err != nil {
 		return err
 	}
@@ -1276,7 +1279,13 @@ func (b *Bridge) stageSubset(workDir, dirName string, entries []ChunkEntry, skip
 	if err := os.MkdirAll(chunksDir, 0o755); err != nil {
 		return fmt.Errorf("create chunks dir: %w", err)
 	}
-	body, err := marshalManifest(Manifest{Version: 1, Chunks: entries})
+	// The project's own version, not 1: engram 3.x refuses a v1 manifest's chunks
+	// once the store has project-owned sessions (see UnionManifests).
+	version := 1
+	if m, err := readManifest(b.manifestPath(dirName)); err == nil {
+		version = max(version, m.Version)
+	}
+	body, err := marshalManifest(Manifest{Version: version, Chunks: entries})
 	if err != nil {
 		return err
 	}
@@ -1353,14 +1362,12 @@ func UnionManifests(ours, theirs []byte) ([]byte, error) {
 		return merged[i].ID < merged[j].ID
 	})
 
-	version := a.Version
-	if version == 0 {
-		version = bb.Version
-	}
-	if version == 0 {
-		version = 1
-	}
-	return marshalManifest(Manifest{Version: version, Chunks: merged})
+	// The higher version wins. engram raises a project's manifest to 2 once its
+	// sessions carry ownership modes, and engram 3.x refuses to import a v1
+	// manifest's chunks into a store with project-owned sessions ("sync
+	// downgrade is unsupported"). Keeping the lower side would pin the project
+	// at v1 and block every upgraded reader; engram 1.16 imports v2 unchanged.
+	return marshalManifest(Manifest{Version: max(a.Version, bb.Version, 1), Chunks: merged})
 }
 
 // FilterChunks returns the entries a contributor published. An empty createdBy

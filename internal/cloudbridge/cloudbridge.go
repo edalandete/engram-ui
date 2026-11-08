@@ -143,7 +143,7 @@ func (b *Bridge) Pull(ctx context.Context, cc *cloudclient.Client, project, crea
 	defer os.RemoveAll(workDir)
 
 	fetch := func(id string) ([]byte, error) { return cc.ReadChunk(ctx, project, id) }
-	if err := writeSyncDir(workDir, entries, fetch); err != nil {
+	if err := writeSyncDir(workDir, manifest.Version, entries, fetch); err != nil {
 		res.Err = err
 		return res
 	}
@@ -263,14 +263,16 @@ func observationSyncIDs(chunkJSON []byte) []string {
 // writeSyncDir builds the `.engram/` layout under workDir: a filtered
 // manifest.json and one gzipped chunk per entry. Aborts on the first fetch or
 // write error so a partial directory is never handed to the import.
-func writeSyncDir(workDir string, entries []cloudclient.ChunkEntry, fetch func(id string) ([]byte, error)) error {
+func writeSyncDir(workDir string, version int, entries []cloudclient.ChunkEntry, fetch func(id string) ([]byte, error)) error {
 	syncDir := filepath.Join(workDir, ".engram")
 	chunksDir := filepath.Join(syncDir, "chunks")
 	if err := os.MkdirAll(chunksDir, 0o755); err != nil {
 		return fmt.Errorf("create chunks dir: %w", err)
 	}
 
-	manifest := cloudclient.Manifest{Version: 1, Chunks: entries}
+	// The cloud's version, not 1: engram 3.x refuses a v1 manifest's chunks once
+	// the store has project-owned sessions.
+	manifest := cloudclient.Manifest{Version: max(version, 1), Chunks: entries}
 	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal manifest: %w", err)

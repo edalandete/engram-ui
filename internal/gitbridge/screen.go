@@ -175,7 +175,7 @@ func (b *Bridge) Quarantined(project string) bool {
 
 // quarantine keeps the refused chunks: files first, manifest last, so
 // Quarantined only reports a complete one.
-func (b *Bridge) quarantine(srcChunks, dirName string, chunks []ChunkEntry) error {
+func (b *Bridge) quarantine(srcChunks, dirName string, version int, chunks []ChunkEntry) error {
 	dir := b.quarantineDir(dirName)
 	if err := os.RemoveAll(dir); err != nil {
 		return err
@@ -183,7 +183,7 @@ func (b *Bridge) quarantine(srcChunks, dirName string, chunks []ChunkEntry) erro
 	if err := copyChunkFiles(srcChunks, filepath.Join(dir, chunksDirName), chunks); err != nil {
 		return err
 	}
-	data, err := marshalManifest(Manifest{Version: 1, Chunks: chunks})
+	data, err := marshalManifest(Manifest{Version: version, Chunks: chunks})
 	if err != nil {
 		return err
 	}
