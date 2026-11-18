@@ -420,15 +420,7 @@ func pushResultFrom(res gitbridge.PushResult) *syncResult {
 func findingsText(findings []gitbridge.Finding) string {
 	lines := make([]string, 0, len(findings))
 	for _, f := range findings {
-		line := f.ID
-		if f.Title != "" {
-			line += " · " + f.Title
-		}
-		line += " — " + f.Reason
-		if f.Excerpt != "" {
-			line += "\n    " + f.Excerpt
-		}
-		lines = append(lines, line)
+		lines = append(lines, f.String())
 	}
 	return strings.Join(lines, "\n")
 }

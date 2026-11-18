@@ -37,6 +37,19 @@ type Finding struct {
 	Excerpt string // the matched text in context, for blocklist findings
 }
 
+// String is the finding as the panel and the CLI list it.
+func (f Finding) String() string {
+	line := f.ID
+	if f.Title != "" {
+		line += " · " + f.Title
+	}
+	line += " — " + f.Reason
+	if f.Excerpt != "" {
+		line += "\n    " + f.Excerpt
+	}
+	return line
+}
+
 // screenChunks screens the given chunks of dir (a chunks directory).
 func screenChunks(dir, project string, chunks []ChunkEntry, patterns []*regexp.Regexp) ([]Finding, error) {
 	var out []Finding
@@ -175,15 +188,15 @@ func (b *Bridge) Quarantined(project string) bool {
 
 // quarantine keeps the refused chunks: files first, manifest last, so
 // Quarantined only reports a complete one.
-func (b *Bridge) quarantine(srcChunks, dirName string, chunks []ChunkEntry) error {
+func (b *Bridge) quarantine(srcChunks, dirName string, m Manifest) error {
 	dir := b.quarantineDir(dirName)
 	if err := os.RemoveAll(dir); err != nil {
 		return err
 	}
-	if err := copyChunkFiles(srcChunks, filepath.Join(dir, chunksDirName), chunks); err != nil {
+	if err := copyChunkFiles(srcChunks, filepath.Join(dir, chunksDirName), m.Chunks); err != nil {
 		return err
 	}
-	data, err := marshalManifest(Manifest{Version: 1, Chunks: chunks})
+	data, err := marshalManifest(m)
 	if err != nil {
 		return err
 	}

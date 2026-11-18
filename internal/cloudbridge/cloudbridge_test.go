@@ -79,7 +79,7 @@ func TestWriteSyncDirAndGzipRoundtrip(t *testing.T) {
 	}
 	fetch := func(id string) ([]byte, error) { return payloads[id], nil }
 
-	if err := writeSyncDir(work, entries, fetch); err != nil {
+	if err := writeSyncDir(work, 2, entries, fetch); err != nil {
 		t.Fatal(err)
 	}
 
@@ -92,7 +92,8 @@ func TestWriteSyncDirAndGzipRoundtrip(t *testing.T) {
 	if err := json.Unmarshal(mb, &m); err != nil {
 		t.Fatal(err)
 	}
-	if m.Version != 1 || len(m.Chunks) != 2 || m.Chunks[0].ID != "aaaa1111" {
+	// The cloud's version survives: rewritten as 1, engram 3.x refuses the chunks.
+	if m.Version != 2 || len(m.Chunks) != 2 || m.Chunks[0].ID != "aaaa1111" {
 		t.Fatalf("manifest mismatch: %+v", m)
 	}
 
@@ -205,7 +206,7 @@ func TestWriteSyncDirFetchErrorAborts(t *testing.T) {
 	work := t.TempDir()
 	entries := []cloudclient.ChunkEntry{{ID: "abcd1234", CreatedBy: "a"}}
 	fetch := func(id string) ([]byte, error) { return nil, io.ErrUnexpectedEOF }
-	if err := writeSyncDir(work, entries, fetch); err == nil {
+	if err := writeSyncDir(work, 1, entries, fetch); err == nil {
 		t.Fatal("expected error when fetch fails")
 	}
 }

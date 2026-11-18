@@ -81,10 +81,14 @@ func (s *Server) renderSync(w http.ResponseWriter, r *http.Request, result *sync
 
 	// Status pill is best-effort: engram returns enabled:false when background
 	// autosync isn't configured, which is the normal case for manual sync.
-	if status, err := s.C.SyncStatus(r.Context(), project); err == nil {
-		data["Status"] = status
-	} else {
-		data["StatusErr"] = err.Error()
+	// Project only: engram 3 has no all-projects sync status. all_projects=true
+	// answers 400, and no project reports on a detected "unknown" project.
+	if project != "" {
+		if status, err := s.C.SyncStatus(r.Context(), project); err == nil {
+			data["Status"] = status
+		} else {
+			data["StatusErr"] = err.Error()
+		}
 	}
 
 	// Pending-conflict count gates Push (see syncPush). Surface it here too so

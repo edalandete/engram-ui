@@ -79,6 +79,32 @@ func TestUnionManifestsBreaksTiesDeterministically(t *testing.T) {
 	}
 }
 
+// engram 3.x refuses a v1 manifest's chunks once the reader has project-owned
+// sessions. Losing the 2 a 3.x publisher wrote would block every upgraded reader.
+func TestUnionManifestsKeepsHigherVersion(t *testing.T) {
+	v1 := []byte(`{"version":1,"chunks":[{"id":"aaa","created_at":"2026-01-01T00:00:00Z"}]}`)
+	v2 := []byte(`{"version":2,"chunks":[{"id":"bbb","created_at":"2026-01-02T00:00:00Z"}]}`)
+	none := []byte(`{"chunks":[]}`)
+
+	for _, tc := range []struct {
+		name        string
+		ours, their []byte
+		want        int
+	}{
+		{"v1+v2", v1, v2, 2},
+		{"v2+v1", v2, v1, 2},
+		{"missing", none, none, 1},
+	} {
+		merged, err := UnionManifests(tc.ours, tc.their)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if m, _ := parseManifest(merged); m.Version != tc.want {
+			t.Errorf("%s: version = %d, want %d", tc.name, m.Version, tc.want)
+		}
+	}
+}
+
 // A manifest still holding conflict markers is not JSON. Refusing loudly keeps
 // us from committing a corrupt index.
 func TestUnionManifestsRejectsGarbage(t *testing.T) {

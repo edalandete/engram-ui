@@ -20,7 +20,7 @@ Save decisions and gotchas as you go, with topic keys (`architecture/*`,
 1. **Never `import` engram packages.** `third_party/engram/` is for building
    the binary and reading source. Nothing else.
 
-2. **Four ways out of this process, no fifth.** Handlers never call `net/http`
+2. **Five ways out of this process, no sixth.** Handlers never call `net/http`
    or `os/exec` directly.
 
    | Boundary | Package | For |
@@ -29,6 +29,7 @@ Save decisions and gotchas as you go, with topic keys (`architecture/*`,
    | CLI exec | `internal/engramcli` | Cloud sync ops engram exposes *only* as subcommands — local engram serves a read-only `GET /sync/status` and has no HTTP trigger for push/pull/enroll. |
    | Cloud HTTP read | `internal/cloudclient` | Manifest + chunks from the cloud server. Read-only, used solely by `cloudbridge` for selective pull. |
    | git exec | `internal/gitcli` | The system git, driven by `gitbridge`. Non-interactive by construction (`GIT_TERMINAL_PROMPT=0`, SSH `BatchMode`) so a prompt can never hang a request. |
+   | gh exec | `internal/selfupdate` | `engram-ui update` only: the newest release, downloaded with the user's gh login. |
 
 3. **Bump `internal/version/MinEngram` when you rely on a new engram field or
    endpoint** — and weigh it first, since it makes boot fail for anyone on an
@@ -46,11 +47,14 @@ Save decisions and gotchas as you go, with topic keys (`architecture/*`,
 
 ```
 cmd/engram-ui/main.go           Entry: launcher → version check → web server
+cmd/engram-ui/share.go          `engram-ui share pull|push|sync -project P`: Engram Shared without the UI
+cmd/engram-ui/update.go         `engram-ui update`: replaces engram-ui.exe with the newest release (UAC when needed)
 internal/client/                Typed HTTP wrapper for LOCAL engram. Single source of API truth.
 internal/engramcli/             CLI exec wrapper for cloud-sync ops + local import.
 internal/cloudclient/           Read-only HTTP client to the CLOUD server. Used only by cloudbridge.
 internal/cloudbridge/           Selective pull: filter cloud chunks by created_by → temp .engram/ → LocalImport.
 internal/gitcli/                Exec wrapper for the system git. Only place that execs git.
+internal/selfupdate/            gh exec for `engram-ui update`: newest release, swap of the running exe, UAC relaunch.
 internal/gitbridge/             Shared-repo sync: one folder per project per repo; several repos, each project publishes to one (repos.go). Owns the publish order and the manifest union.
 internal/web/handlers/          HTTP routes. sync.go = cloud panel; share.go = shared-repo panel.
 internal/web/static/css/app.css Palette (this repo's own — see the file header).

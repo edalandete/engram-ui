@@ -46,8 +46,22 @@ func main() {
 }
 
 func run(logger *log.Logger) error {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "share":
+			return runShare(os.Args[2:])
+		case "update":
+			return runUpdate(os.Args[2:])
+		}
+	}
+
 	cfg := config.FromFlags()
 	flag.Parse()
+	// A word this version does not know must not start the web UI: whoever
+	// typed it (or a script) would wait on a server that never ends.
+	if flag.NArg() > 0 {
+		return fmt.Errorf("unknown command %q (commands: share, update; or no command for the web UI)", flag.Arg(0))
+	}
 
 	logger.Printf("version=%s commit=%s listen=%s", version.Version, version.Commit, cfg.ListenAddr)
 
@@ -61,7 +75,7 @@ func run(logger *log.Logger) error {
 			logger.Printf("spawn-engram failed (%v); falling back to external engram at %s", err, cfg.EngramURL)
 		} else {
 			cfg.EngramURL = url
-			logger.Printf("spawned embedded engram at %s", url)
+			logger.Printf("spawned engram %s at %s", l.BinPath(), url)
 			defer func() { _ = l.Stop() }()
 		}
 	}

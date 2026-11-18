@@ -4,7 +4,8 @@
 //   - Embedded: the engram binary is built from the third_party/engram submodule
 //     by build-engram.ps1 and shipped via go:embed. Spawn extracts it to the
 //     OS user cache dir and starts `engram serve <port>` as a child process,
-//     killed on shutdown.
+//     killed on shutdown. An engram binary next to engram-ui's executable is
+//     spawned instead, and nothing is extracted.
 //   - External: engram-ui assumes engram serve is already running. The launcher
 //     only health-checks the URL.
 package launcher
@@ -53,7 +54,8 @@ func (l *Launcher) URL() string { return l.url }
 // "engram" on PATH when this is empty.
 func (l *Launcher) BinPath() string { return l.binPath }
 
-// Spawn extracts the embedded engram binary, picks a free local port, and
+// Spawn extracts the embedded engram binary (unless one sits next to
+// engram-ui's executable, which is used as is), picks a free local port, and
 // starts `engram serve <port>` as a child process. Returns the base URL the
 // subprocess listens on. Stop must be called to terminate the child.
 //
@@ -70,9 +72,15 @@ func (l *Launcher) Spawn(ctx context.Context, token string) (string, error) {
 	if l.cmd != nil {
 		return l.url, nil
 	}
-	binPath, err := extractEmbeddedBinary()
-	if err != nil {
-		return "", err
+	binPath := ""
+	if self, err := os.Executable(); err == nil {
+		binPath = siblingBinary(filepath.Dir(self))
+	}
+	if binPath == "" {
+		var err error
+		if binPath, err = extractEmbeddedBinary(); err != nil {
+			return "", err
+		}
 	}
 	port, err := freePort()
 	if err != nil {
@@ -175,14 +183,31 @@ func (l *Launcher) WaitReady(ctx context.Context, c *client.Client, timeout time
 	return nil, fmt.Errorf("engram not reachable: %w", lastErr)
 }
 
+func binName() string {
+	if runtime.GOOS == "windows" {
+		return "engram.exe"
+	}
+	return "engram"
+}
+
+// siblingBinary returns the engram binary in dir (the folder engram-ui runs
+// from), or "" if there is none. One placed there wins over the embedded copy,
+// so a specific engram can be used without rebuilding engram-ui. That folder
+// is trusted exactly as much as engram-ui itself; the working directory is
+// not, which is why it is never looked at.
+func siblingBinary(dir string) string {
+	p := filepath.Join(dir, binName())
+	if fi, err := os.Stat(p); err != nil || !fi.Mode().IsRegular() {
+		return ""
+	}
+	return p
+}
+
 // extractEmbeddedBinary writes the embedded engram binary to the OS user cache
 // dir (idempotent: skipped when the cached copy is already identical) and
 // returns its path.
 func extractEmbeddedBinary() (string, error) {
-	name := "engram"
-	if runtime.GOOS == "windows" {
-		name = "engram.exe"
-	}
+	name := binName()
 	embedPath := "embedded/" + name
 	data, err := fs.ReadFile(embeddedFS, embedPath)
 	if err != nil {

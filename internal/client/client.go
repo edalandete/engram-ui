@@ -49,9 +49,20 @@ func (c *Client) Health(ctx context.Context) (*Health, error) {
 	return &out, nil
 }
 
+// scopeProject sends project, or all_projects=true when it is empty: since
+// engram 2.0 an omitted project means the server's "current" project, not every
+// project. Older engram ignores the unknown parameter and already read them all.
+func scopeProject(v url.Values, project string) {
+	if project != "" {
+		v.Set("project", project)
+	} else {
+		v.Set("all_projects", "true")
+	}
+}
+
 func (c *Client) Stats(ctx context.Context) (*Stats, error) {
 	var out Stats
-	if err := c.get(ctx, "/stats", nil, &out); err != nil {
+	if err := c.get(ctx, "/stats", url.Values{"all_projects": {"true"}}, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -70,9 +81,7 @@ func (c *Client) Search(ctx context.Context, q SearchQuery) (*SearchResponse, er
 // make callers filter by hand over a wide window.
 func (c *Client) RecentObservations(ctx context.Context, project, scope string, limit, offset int) ([]Observation, error) {
 	v := url.Values{}
-	if project != "" {
-		v.Set("project", project)
-	}
+	scopeProject(v, project)
 	if scope != "" {
 		v.Set("scope", scope)
 	}
@@ -97,6 +106,8 @@ func (c *Client) GetObservation(ctx context.Context, id int64) (*Observation, er
 func (c *Client) Timeline(ctx context.Context, id int64, before, after int) (*TimelineResponse, error) {
 	v := url.Values{}
 	v.Set("observation_id", fmt.Sprintf("%d", id))
+	// The focus observation may live in any project; a "current" one would 404 it.
+	v.Set("all_projects", "true")
 	if before > 0 {
 		v.Set("before", fmt.Sprintf("%d", before))
 	}
@@ -124,9 +135,7 @@ func (c *Client) GetSession(ctx context.Context, id string) (*Session, error) {
 // project switcher every other screen obeys.
 func (c *Client) RecentSessions(ctx context.Context, project string, limit, offset int) ([]Session, error) {
 	v := url.Values{}
-	if project != "" {
-		v.Set("project", project)
-	}
+	scopeProject(v, project)
 	if n := window(limit, offset); n > 0 {
 		v.Set("limit", strconv.Itoa(n))
 	}
@@ -166,9 +175,7 @@ func skip[T any](items []T, offset int) []T {
 
 func (c *Client) RecentPrompts(ctx context.Context, project string, limit int) ([]Prompt, error) {
 	v := url.Values{}
-	if project != "" {
-		v.Set("project", project)
-	}
+	scopeProject(v, project)
 	if limit > 0 {
 		v.Set("limit", strconv.Itoa(limit))
 	}
@@ -182,9 +189,7 @@ func (c *Client) RecentPrompts(ctx context.Context, project string, limit int) (
 func (c *Client) SearchPrompts(ctx context.Context, query, project string, limit int) ([]Prompt, error) {
 	v := url.Values{}
 	v.Set("q", query)
-	if project != "" {
-		v.Set("project", project)
-	}
+	scopeProject(v, project)
 	if limit > 0 {
 		v.Set("limit", strconv.Itoa(limit))
 	}
@@ -207,13 +212,8 @@ func (c *Client) SearchPrompts(ctx context.Context, query, project string, limit
 // carries ctx, which is the browser connection.
 func (c *Client) Export(ctx context.Context, project string) (io.ReadCloser, string, error) {
 	v := url.Values{}
-	if project != "" {
-		v.Set("project", project)
-	}
-	u := c.baseURL + "/export"
-	if len(v) > 0 {
-		u += "?" + v.Encode()
-	}
+	scopeProject(v, project)
+	u := c.baseURL + "/export?" + v.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, "", err
@@ -243,11 +243,26 @@ func (c *Client) CreateSession(ctx context.Context, id, project, directory strin
 	return c.post(ctx, "/sessions", body, nil)
 }
 
+// ownerQuery reads the observation's current project into expected_project:
+// engram 3.0 refuses to update or delete an observation unless the caller names
+// its owner. Older engram ignores the parameter.
+func (c *Client) ownerQuery(ctx context.Context, id int64) (url.Values, error) {
+	obs, err := c.GetObservation(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return url.Values{"expected_project": {obs.Project}}, nil
+}
+
 // UpdateObservation patches selected fields of an observation.
 // Only non-nil pointer fields in req are sent.
 func (c *Client) UpdateObservation(ctx context.Context, id int64, req UpdateObservationRequest) (*Observation, error) {
+	q, err := c.ownerQuery(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	var out Observation
-	if err := c.patch(ctx, fmt.Sprintf("/observations/%d", id), req, &out); err != nil {
+	if err := c.patch(ctx, fmt.Sprintf("/observations/%d?%s", id, q.Encode()), req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -255,11 +270,14 @@ func (c *Client) UpdateObservation(ctx context.Context, id int64, req UpdateObse
 
 // DeleteObservation removes an observation. hard=true wipes; false soft-deletes.
 func (c *Client) DeleteObservation(ctx context.Context, id int64, hard bool) error {
-	path := fmt.Sprintf("/observations/%d", id)
-	if hard {
-		path += "?hard=true"
+	q, err := c.ownerQuery(ctx, id)
+	if err != nil {
+		return err
 	}
-	return c.delete(ctx, path)
+	if hard {
+		q.Set("hard", "true")
+	}
+	return c.delete(ctx, fmt.Sprintf("/observations/%d?%s", id, q.Encode()))
 }
 
 // AddObservation posts a new observation. SessionID must already exist.
@@ -278,9 +296,7 @@ func (c *Client) AddObservation(ctx context.Context, req AddObservationRequest) 
 
 func (c *Client) Conflicts(ctx context.Context, project, status string, limit, offset int) (*ConflictsPage, error) {
 	v := url.Values{}
-	if project != "" {
-		v.Set("project", project)
-	}
+	scopeProject(v, project)
 	if status != "" {
 		v.Set("status", status)
 	}
@@ -307,9 +323,7 @@ func (c *Client) Conflict(ctx context.Context, id int64) (*ConflictDetail, error
 
 func (c *Client) ConflictStats(ctx context.Context, project string) (*ConflictStats, error) {
 	v := url.Values{}
-	if project != "" {
-		v.Set("project", project)
-	}
+	scopeProject(v, project)
 	var out ConflictStats
 	if err := c.get(ctx, "/conflicts/stats", v, &out); err != nil {
 		return nil, err

@@ -4,7 +4,9 @@ Web UI for [Engram](https://github.com/Gentleman-Programming/engram). Same
 screens as the TUI, in a browser, built and released independently of engram.
 
 > **Personal copy** of Rafa Alonso's engram-ui v0.1.16 (MIT, see `LICENSE`),
-> imported without its history.
+> imported without its history, and synced with his v0.1.26. The next sync
+> merges from that tag: `git replace --graft <this repo's last sync commit> v0.1.26`,
+> `git merge --squash upstream/main`, then `git replace -d`.
 
 > **Design rule.** This repo never imports engram packages. It talks to engram
 > over the local HTTP API, and for the few operations engram only exposes as
@@ -62,12 +64,15 @@ Templates are embedded, so rebuild to see template changes.
 
 ```
 cmd/engram-ui/main.go      Entry: launcher → version check → web server
+cmd/engram-ui/share.go     `engram-ui share pull|push|sync -project P`: Engram Shared without the UI
+cmd/engram-ui/update.go    `engram-ui update`: replaces engram-ui.exe with the newest release (UAC when needed)
 internal/client/           Typed HTTP client for local engram. Single source of API truth.
 internal/engramcli/        Execs the engram binary for cloud sync ops that have no HTTP trigger.
 internal/cloudclient/      Read-only HTTP reads from the cloud server (manifest + chunks).
 internal/cloudbridge/      Selective pull from cloud, filtered by contributor.
 internal/gitcli/           Execs the system git. Non-interactive.
 internal/gitbridge/        Shared-repo sync: share memories through a git repo.
+internal/selfupdate/       Execs gh to download the newest release for `engram-ui update`.
 internal/web/              Handlers, templates, static (HTMX + a little JS).
 internal/launcher/         Engram subprocess lifecycle + the embedded binary.
 internal/config/           Flags and env.

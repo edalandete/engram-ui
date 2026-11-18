@@ -841,15 +841,16 @@ func (b *Bridge) publish(ctx context.Context, project string) PushResult {
 	}
 
 	exported := filepath.Join(workDir, syncDirName, chunksDirName)
-	added, err := newChunks(workDir, staged)
+	add, err := newChunks(workDir, staged)
 	if err != nil {
 		res.Stage, res.Err = "export", err
 		return res
 	}
+	added := add.Chunks
 	if screened && len(added) > 0 {
 		findings, err := screenChunks(exported, project, added, patterns)
 		if err == nil && len(findings) > 0 {
-			err = b.quarantine(exported, dirName, added)
+			err = b.quarantine(exported, dirName, add)
 		}
 		if err != nil {
 			res.Stage, res.Err = "screen", err
@@ -861,7 +862,7 @@ func (b *Bridge) publish(ctx context.Context, project string) PushResult {
 			return res
 		}
 	}
-	if err := b.copyIn(exported, dirName, added); err != nil {
+	if err := b.copyIn(exported, dirName, add); err != nil {
 		res.Stage, res.Err = "export", err
 		return res
 	}
@@ -932,7 +933,7 @@ func (b *Bridge) PublishQuarantined(ctx context.Context, project string) PushRes
 		}
 	}
 	b.ensureGitAttributes()
-	if err := b.copyIn(filepath.Join(held, chunksDirName), dirName, m.Chunks); err != nil {
+	if err := b.copyIn(filepath.Join(held, chunksDirName), dirName, m); err != nil {
 		res.Stage, res.Err = "export", err
 		return res
 	}
@@ -1032,21 +1033,22 @@ func (b *Bridge) stagedView(dirName string) []ChunkEntry {
 // follows, and for the same reason: an entry dropped from the manifest is a
 // chunk nobody will ever import again.
 func (b *Bridge) adoptChunks(workDir, dirName string, staged []ChunkEntry) ([]ChunkEntry, error) {
-	added, err := newChunks(workDir, staged)
+	add, err := newChunks(workDir, staged)
 	if err != nil {
 		return nil, err
 	}
-	if err := b.copyIn(filepath.Join(workDir, syncDirName, chunksDirName), dirName, added); err != nil {
+	if err := b.copyIn(filepath.Join(workDir, syncDirName, chunksDirName), dirName, add); err != nil {
 		return nil, err
 	}
-	return added, nil
+	return add.Chunks, nil
 }
 
-// newChunks returns what the export in workDir produced beyond the staged view.
-func newChunks(workDir string, staged []ChunkEntry) ([]ChunkEntry, error) {
+// newChunks returns what the export in workDir produced beyond the staged view,
+// with the manifest version engram wrote.
+func newChunks(workDir string, staged []ChunkEntry) (Manifest, error) {
 	produced, err := readManifest(filepath.Join(workDir, syncDirName, manifestName))
 	if err != nil {
-		return nil, fmt.Errorf("read exported manifest: %w", err)
+		return Manifest{}, fmt.Errorf("read exported manifest: %w", err)
 	}
 	was := make(map[string]bool, len(staged))
 	for _, e := range staged {
@@ -1058,16 +1060,16 @@ func newChunks(workDir string, staged []ChunkEntry) ([]ChunkEntry, error) {
 			added = append(added, e)
 		}
 	}
-	return added, nil
+	return Manifest{Version: produced.Version, Chunks: added}, nil
 }
 
-// copyIn copies chunks from srcChunks into the project and unions their entries
-// into its manifest.
-func (b *Bridge) copyIn(srcChunks, dirName string, added []ChunkEntry) error {
-	if len(added) == 0 {
+// copyIn copies add's chunks from srcChunks into the project and unions its
+// entries into the project's manifest.
+func (b *Bridge) copyIn(srcChunks, dirName string, add Manifest) error {
+	if len(add.Chunks) == 0 {
 		return nil
 	}
-	if err := copyChunkFiles(srcChunks, filepath.Join(b.dir, dirName, syncDirName, chunksDirName), added); err != nil {
+	if err := copyChunkFiles(srcChunks, filepath.Join(b.dir, dirName, syncDirName, chunksDirName), add.Chunks); err != nil {
 		return err
 	}
 
@@ -1077,7 +1079,9 @@ func (b *Bridge) copyIn(srcChunks, dirName string, added []ChunkEntry) error {
 	if err != nil {
 		current = []byte(`{"version":1,"chunks":[]}`) // first publish of this project
 	}
-	mine, err := marshalManifest(Manifest{Version: 1, Chunks: added})
+	// Keep engram's version: it writes 2 once the project's sessions carry
+	// ownership modes (see UnionManifests).
+	mine, err := marshalManifest(add)
 	if err != nil {
 		return err
 	}
@@ -1178,31 +1182,19 @@ type PullResult struct {
 	Err           error
 }
 
-// Pull imports every chunk of one project from the shared repo.
+// A pull fails with one of these when there is nothing to pull yet, so a
+// caller that publishes next (`engram-ui share sync`) can tell them from a real
+// failure.
+var (
+	ErrEmptyRepo = errors.New("the shared repo is empty — nobody has published yet")
+	ErrNotShared = errors.New("not in the shared repo yet")
+)
+
+// Pull imports every chunk of one project from the shared repo. Staged like a
+// selective pull, never straight from the clone, because the staged manifest is
+// what lets engram 3.x read a v1 project (see stageSubset).
 func (b *Bridge) Pull(ctx context.Context, project string) PullResult {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	res := PullResult{Project: project}
-	dirName := ProjectDirName(project)
-	if err := b.refresh(ctx); err != nil {
-		res.Err = err
-		return res
-	}
-	projDir := filepath.Join(b.dir, dirName)
-	m, err := readManifest(b.manifestPath(dirName))
-	if err != nil {
-		res.Err = fmt.Errorf("%q is not in the shared repo yet", project)
-		return res
-	}
-	res.ChunksTotal, res.ChunksMatched = len(m.Chunks), len(m.Chunks)
-
-	imp := b.cli.LocalImport(ctx, projDir)
-	res.Output, res.Err = imp.Output, imp.Err
-	if res.Err == nil {
-		b.markImported(dirName, chunkIDs(m.Chunks))
-	}
-	return res
+	return b.PullSelective(ctx, project, "")
 }
 
 // PullSelective imports only the chunks a chosen contributor published.
@@ -1224,7 +1216,7 @@ func (b *Bridge) PullSelective(ctx context.Context, project, createdBy string) P
 	}
 	m, err := readManifest(b.manifestPath(dirName))
 	if err != nil {
-		res.Err = fmt.Errorf("%q is not in the shared repo yet", project)
+		res.Err = fmt.Errorf("%q is %w", project, ErrNotShared)
 		return res
 	}
 	res.ChunksTotal = len(m.Chunks)
@@ -1276,7 +1268,16 @@ func (b *Bridge) stageSubset(workDir, dirName string, entries []ChunkEntry, skip
 	if err := os.MkdirAll(chunksDir, 0o755); err != nil {
 		return fmt.Errorf("create chunks dir: %w", err)
 	}
-	body, err := marshalManifest(Manifest{Version: 1, Chunks: entries})
+	// 2 at least. engram 3.x refuses a v1 manifest's chunks once the store has
+	// project-owned sessions ("sync downgrade is unsupported"), and raises a
+	// manifest to 2 itself when it exports from such a store (sync.go), chunks
+	// v1 publishers wrote included. Staging as 2 imports what they wrote, and a
+	// publish moves the project to 2 for every reader (see UnionManifests).
+	version := 2
+	if m, err := readManifest(b.manifestPath(dirName)); err == nil {
+		version = max(version, m.Version)
+	}
+	body, err := marshalManifest(Manifest{Version: version, Chunks: entries})
 	if err != nil {
 		return err
 	}
@@ -1306,7 +1307,7 @@ func (b *Bridge) refresh(ctx context.Context) error {
 		return errors.New("no shared repository configured")
 	}
 	if !b.git.HasCommits(ctx, b.dir) {
-		return errors.New("the shared repo is empty — nobody has published yet")
+		return ErrEmptyRepo
 	}
 	if r := b.git.PullFFOnly(ctx, b.dir); r.Failed() {
 		return fmt.Errorf("could not update the shared repo: %s", firstLine(r.Output))
@@ -1353,14 +1354,12 @@ func UnionManifests(ours, theirs []byte) ([]byte, error) {
 		return merged[i].ID < merged[j].ID
 	})
 
-	version := a.Version
-	if version == 0 {
-		version = bb.Version
-	}
-	if version == 0 {
-		version = 1
-	}
-	return marshalManifest(Manifest{Version: version, Chunks: merged})
+	// The higher version wins. engram raises a project's manifest to 2 once its
+	// sessions carry ownership modes, and engram 3.x refuses to import a v1
+	// manifest's chunks into a store with project-owned sessions ("sync
+	// downgrade is unsupported"). Keeping the lower side would pin the project
+	// at v1 and block every upgraded reader; engram 1.16 imports v2 unchanged.
+	return marshalManifest(Manifest{Version: max(a.Version, bb.Version, 1), Chunks: merged})
 }
 
 // FilterChunks returns the entries a contributor published. An empty createdBy

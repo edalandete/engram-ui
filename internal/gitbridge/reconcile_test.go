@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -254,6 +255,68 @@ func TestRefreshOnEmptyRepoIsNotAnError(t *testing.T) {
 	}
 	if err := b.Refresh(ctx); err != nil {
 		t.Errorf("refresh on an empty repo = %v, want nil", err)
+	}
+}
+
+// TestPullSaysWhenThereIsNothingToPull: `engram-ui share sync` publishes after
+// pulling, so it must tell "nothing here yet" apart from a pull that failed.
+func TestPullSaysWhenThereIsNothingToPull(t *testing.T) {
+	ctx := context.Background()
+	git := gitcli.New()
+	if err := git.Available(ctx); err != nil {
+		t.Skip("git not available")
+	}
+
+	root := t.TempDir()
+	t.Setenv("GIT_AUTHOR_NAME", "test")
+	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.invalid")
+	t.Setenv("GIT_COMMITTER_NAME", "test")
+	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.invalid")
+	t.Setenv("ENGRAM_DATA_DIR", filepath.Join(root, "data"))
+	bare := filepath.Join(root, "origin.git")
+	mustGit(t, "", "init", "--quiet", "--bare", bare)
+
+	b := New(nil, git)
+	if res := b.Setup(ctx, bare); res.Failed() {
+		t.Fatalf("setup: %v\n%s", res.Err, res.Output)
+	}
+	if err := b.Pull(ctx, "infinity-core").Err; !errors.Is(err, ErrEmptyRepo) {
+		t.Errorf("pull from an empty repo = %v, want ErrEmptyRepo", err)
+	}
+
+	writeManifest(t, b.Dir(), "other-project", manifestJSON(t, entry("aaa", "dev-a", "2026-08-19T15:41:24Z")))
+	mustGit(t, b.Dir(), "add", "-A")
+	mustGit(t, b.Dir(), "commit", "--quiet", "-m", "engram: publish other-project")
+	mustGit(t, b.Dir(), "push", "--quiet", "--set-upstream", "origin", branchOf(t, b.Dir()))
+	if err := b.Pull(ctx, "infinity-core").Err; !errors.Is(err, ErrNotShared) {
+		t.Errorf("pull of a project nobody published = %v, want ErrNotShared", err)
+	}
+}
+
+// TestStagingReadsAV1ProjectAsV2: a project only engram builds that write v1
+// have published must still import into a store with project-owned sessions,
+// which engram 3.x refuses for a v1 manifest. Pull and publish stage it as 2.
+func TestStagingReadsAV1ProjectAsV2(t *testing.T) {
+	t.Setenv("ENGRAM_DATA_DIR", filepath.Join(t.TempDir(), "data"))
+	b := New(nil, gitcli.New())
+	const project = "nlo-ai-toolkit"
+	published := entry("aaa", "sanche53", "2026-11-18T10:00:00Z")
+	writeManifest(t, b.Dir(), project, manifestJSON(t, published)) // version 1
+	writeChunk(t, b.Dir(), project, "aaa", "obs-1")
+
+	work := t.TempDir()
+	if err := b.stageSubset(work, project, []ChunkEntry{published}, false); err != nil {
+		t.Fatalf("stageSubset: %v", err)
+	}
+	m, err := readManifest(filepath.Join(work, syncDirName, manifestName))
+	if err != nil {
+		t.Fatalf("staged manifest: %v", err)
+	}
+	if m.Version != 2 {
+		t.Errorf("staged manifest version = %d, want 2", m.Version)
+	}
+	if _, err := os.Stat(filepath.Join(work, syncDirName, chunksDirName, "aaa.jsonl.gz")); err != nil {
+		t.Errorf("chunk not staged: %v", err)
 	}
 }
 
